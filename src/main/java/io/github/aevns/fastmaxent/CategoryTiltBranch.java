@@ -8,9 +8,13 @@ import java.util.TreeSet;
 /**
  * One sign of t in the category family p(k | t) ~ W_k exp(-t x_k), where x_k are the scaled unique values.
  * Works in a bounded "gap" form with tau = |t|:
- *   logPartition(tau) = ln sum_k W_k exp(-signOfT * tau * (x_k - referenceValue))   (<= ln of total weight, bounded)
- *   meanGap(tau)      = signOfT * (E[x] - referenceValue) >= 0, decreasing, derivative = -variance
- *   variance(tau)     = Var[x]
+ * <p>
+ * logPartition(tau) = ln sum_k W_k exp(-signOfT * tau * (x_k - referenceValue))   (<= ln of total weight, bounded)
+ * <p>
+ * meanGap(tau)      = signOfT * (E[x] - referenceValue) >= 0, decreasing, derivative = -variance
+ * <p>
+ * variance(tau)     = Var[x]
+ * <p>
  * referenceValue = x_min for signOfT = +1 and x_max for signOfT = -1, so every exponential is <= 1.
  */
 final class CategoryTiltBranch {

@@ -6,36 +6,37 @@ import java.util.random.RandomGenerator;
  * Draws a category and a quantity from the maximum-entropy distribution relative to a prior, with E[N] = n and
  * E[N V] = s for quantity N and category value V. n is one of a set fixed at construction; s can be any value in the
  * supported range. Quantity 0, if allowed, is a null state with no category.
- *
+ * <p>
  * With category prior w and quantity prior m:
  *   p(null) ~ m(0),   p(c, q) ~ w_c m(q) exp(-lambda q - beta q v_c)   (q != 0)
+ * <p>
+ * Immutable once initialized; sampling is thread-safe if each caller supplies its own {@link RandomGenerator}.
  */
 public final class MaxEntSampler {
-    /** Result of a draw. */
+    /**
+     * Result of a draw.
+     *  Indices correspond to the values and quantities arrays being sampled from.
+     * */
     public static final class Sample {
         /** Index into the values array, or -1 for the null state. */
         public final int categoryIndex;
         /** Index into the quantities array. */
         public final int quantityIndex;
-        /** The drawn quantity, quantities[quantityIndex]; 0 for the null state. */
-        public final double quantity;
 
-        Sample(int categoryIndex, int quantityIndex, double quantity) {
+        Sample(int categoryIndex, int quantityIndex) {
             this.categoryIndex = categoryIndex;
             this.quantityIndex = quantityIndex;
-            this.quantity = quantity;
         }
     }
 
     private final UniqueValueGroups groups;
     private final double valueScale, inverseValueScale;
     private final CategoryTable categoryTable;
-    private final double[] quantityValues;
     private final int nullStateIndex;
     private final QuantityTable[] quantityTables;
 
     /**
-     * Builds the sampling tables. Indices in a {@link Sample} refer to positions in the arrays as given.
+     * Builds the sampling tables.
      *
      * @param values               the value of each category; positive, sorted ascending, at least two distinct
      * @param categoryPriorWeights prior weight of each category; positive, any scale
@@ -53,7 +54,6 @@ public final class MaxEntSampler {
         for (double expectedQuantity : expectedQuantities) quantitySet.requireReachable(expectedQuantity);
         if (quantityPriorWeights.length != quantitySet.stateCount)
             throw new IllegalArgumentException("one quantity weight per quantity required");
-        quantityValues = quantitySet.values;
         nullStateIndex = quantitySet.nullStateIndex;
 
         groups = new UniqueValueGroups(values, categoryPriorWeights);
@@ -86,9 +86,9 @@ public final class MaxEntSampler {
         long stateAndCategoryRow =
                 quantityTables[expectedQuantityIndex].drawStateAndCategoryRow(s * inverseValueScale, rng);
         int state = (int) (stateAndCategoryRow >>> 32);
-        if (state == nullStateIndex) return new Sample(-1, state, 0);
+        if (state == nullStateIndex) return new Sample(-1, state);
         int uniqueIndex = categoryTable.drawUniqueIndex((int) stateAndCategoryRow, rng.nextLong());
-        return new Sample(groups.drawEntryIndex(uniqueIndex, rng), state, quantityValues[state]);
+        return new Sample(groups.drawEntryIndex(uniqueIndex, rng), state);
     }
 
     /** Lower end of the clamp interval for s (raw units) for the given expected-quantity index. */

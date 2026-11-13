@@ -146,10 +146,9 @@ public class MaxEntSamplerTest {
                 int inconsistentSamples = 0;
                 for (int j = 1; j <= DRAWS; j++) {
                     var sample = sampler.sample(n, setS, random);
-                    // Read the quantity through the returned index, so a wrong index fails the moment checks.
                     double quantity = quantities[sample.quantityIndex];
                     boolean nullMismatch = (sample.categoryIndex < 0) != (quantity == 0);
-                    if (sample.quantity != quantity || nullMismatch) inconsistentSamples++;
+                    if (nullMismatch) inconsistentSamples++;
                     double nv = sample.categoryIndex >= 0 ? quantity * values[sample.categoryIndex] : 0;
                     double dN = quantity - meanN;
                     meanN += dN / j;
@@ -167,7 +166,7 @@ public class MaxEntSamplerTest {
                 checks.add(() -> assertEquals(setN, observedN, toleranceN, "<N> at " + cell));
                 checks.add(() -> assertEquals(setS, observedNV, toleranceNV, "<NV> at " + cell));
                 checks.add(() -> assertEquals(0, inconsistent,
-                        "samples whose quantity, quantityIndex and null-state category disagree at " + cell));
+                        "samples whose quantity and null-state category disagree at " + cell));
             }
         }
         assertAll(configuration.name, checks);

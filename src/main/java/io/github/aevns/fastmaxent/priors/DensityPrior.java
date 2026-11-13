@@ -5,7 +5,7 @@ import java.util.Arrays;
 /**
  * Prior weights that correct for crowding: values close together along an axis share weight, after Leinster and
  * Cobbold's similarity-sensitive diversity.
- *
+ * <p>
  * Each unique value k, occurring g_k times, gets W_k ~ g_k / (1 - sigma + sigma * rho_k), split evenly among its
  * occurrences. rho_k = sum_j g_j K(u_k - u_j) is the density around its axis position u_k, with K an Epanechnikov
  * kernel of half-width h. Sigma = 0 weights every value equally; sigma = 1 weights regions by how much of the axis they
