@@ -24,8 +24,8 @@ final class CategoryTiltBranch {
     // Adaptive dense grid in tau, sorted ascending; node 0 is tau = 0 and the last node is saturationTau.
     double[] gridTau, gridLogPartition, gridMeanGap, gridVariance;
     int gridNodeCount;
-    /** tau of each stored category CDF row (a subset of the grid nodes), ascending. */
-    double[] categoryRowTau;
+    /** tau of each stored row (a subset of the grid nodes), ascending. */
+    double[] rowTau;
 
     private final double[] scratchWeights;
 
@@ -149,14 +149,14 @@ final class CategoryTiltBranch {
         }
     }
 
-    /** Chooses category CDF rows (a subset of grid nodes) equally spaced in the integral of sigma d(tau). */
-    void selectCategoryRowNodes(int rowCount) {
-        int[] categoryRowGridIndices = chooseCategoryRowNodes(rowCount);
-        categoryRowTau = new double[categoryRowGridIndices.length];
-        for (int i = 0; i < categoryRowTau.length; i++) categoryRowTau[i] = gridTau[categoryRowGridIndices[i]];
+    /** Chooses stored rows (a subset of grid nodes) equally spaced in the integral of sigma d(tau). */
+    void selectRowNodes(int rowCount) {
+        int[] rowGridIndices = chooseRowNodes(rowCount);
+        rowTau = new double[rowGridIndices.length];
+        for (int i = 0; i < rowTau.length; i++) rowTau[i] = gridTau[rowGridIndices[i]];
     }
 
-    private int[] chooseCategoryRowNodes(int rowCount) {
+    private int[] chooseRowNodes(int rowCount) {
         if (rowCount >= gridNodeCount) {
             int[] allNodes = new int[gridNodeCount];
             for (int i = 0; i < gridNodeCount; i++) allNodes[i] = i;

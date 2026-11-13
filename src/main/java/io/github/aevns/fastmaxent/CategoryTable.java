@@ -11,7 +11,7 @@ final class CategoryTable {
     private final double[] interleavedWeightAndScaledValue;
     /** rowCount x blocksPerRow; each row is a {@link FixedPointCdf} over its blocks. */
     private final int[] blockCdf;
-    private final double[] rowSignedT;
+    private final double[] rowT;
     /** Realized E[x] of each row under the quantized CDF. */
     private final double[] rowMeanScaledValue;
 
@@ -19,23 +19,23 @@ final class CategoryTable {
         return (uniqueCount + blockSize - 1) / blockSize;
     }
 
-    CategoryTable(double[] scaledValues, double[] uniqueWeights, double[] rowSignedT, int blockSize) {
+    CategoryTable(double[] scaledValues, double[] uniqueWeights, double[] rowT, int blockSize) {
         this.uniqueCount = scaledValues.length;
         this.blockSize = blockSize;
         this.blocksPerRow = blocksPerRow(uniqueCount, blockSize);
-        this.rowSignedT = rowSignedT;
+        this.rowT = rowT;
         interleavedWeightAndScaledValue = new double[2 * uniqueCount];
         for (int k = 0; k < uniqueCount; k++) {
             interleavedWeightAndScaledValue[2 * k] = uniqueWeights[k];
             interleavedWeightAndScaledValue[2 * k + 1] = scaledValues[k];
         }
-        blockCdf = new int[rowSignedT.length * blocksPerRow];
+        blockCdf = new int[rowT.length * blocksPerRow];
         buildBlockCdf();
-        rowMeanScaledValue = new double[rowSignedT.length];
-        for (int row = 0; row < rowSignedT.length; row++) rowMeanScaledValue[row] = computeRowMeanScaledValue(row);
+        rowMeanScaledValue = new double[rowT.length];
+        for (int row = 0; row < rowT.length; row++) rowMeanScaledValue[row] = computeRowMeanScaledValue(row);
     }
 
-    int rowCount() { return rowSignedT.length; }
+    int rowCount() { return rowT.length; }
 
     double rowMeanScaledValue(int row) { return rowMeanScaledValue[row]; }
 
@@ -53,8 +53,8 @@ final class CategoryTable {
     private void buildBlockCdf() {
         double[] weights = new double[uniqueCount];
         double[] blockCumulativeWeight = new double[blocksPerRow];
-        for (int row = 0; row < rowSignedT.length; row++) {
-            double t = rowSignedT[row];
+        for (int row = 0; row < rowT.length; row++) {
+            double t = rowT[row];
             double reference = referenceValue(t, 0, uniqueCount);
             double totalWeight = 0;
             for (int k = 0; k < uniqueCount; k++) {
@@ -79,7 +79,7 @@ final class CategoryTable {
     int drawUniqueIndex(int row, long random) {
         int block = FixedPointCdf.search(blockCdf, row * blocksPerRow, blocksPerRow, FixedPoint.highBits(random));
         int blockStart = block * blockSize, blockEnd = Math.min(blockStart + blockSize, uniqueCount);
-        double t = rowSignedT[row];
+        double t = rowT[row];
         double reference = referenceValue(t, blockStart, blockEnd);
         double[] blockWeights = new double[blockSize];
         double blockTotal = 0;
@@ -105,7 +105,7 @@ final class CategoryTable {
      */
     double[] rowDistribution(int row) {
         double[] distribution = new double[uniqueCount];
-        double t = rowSignedT[row];
+        double t = rowT[row];
         double previousCdf = 0;
         for (int block = 0; block < blocksPerRow; block++) {
             double currentCdf = FixedPointCdf.probabilityAt(blockCdf, row * blocksPerRow + block);

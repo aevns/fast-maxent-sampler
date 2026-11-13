@@ -40,14 +40,14 @@ final class CategoryFamily {
         int totalCategoryRows =
                 (int) Math.max(32, Math.min(2000, params.categoryTableBudgetBytes() / bytesPerCategoryRow));
         int categoryRowsPerBranch = Math.max(8, totalCategoryRows / 2);
-        positiveBranch.selectCategoryRowNodes(categoryRowsPerBranch);
-        negativeBranch.selectCategoryRowNodes(categoryRowsPerBranch);
-        negativeRowOffset = positiveBranch.categoryRowTau.length;
-        double[] rowSignedT = new double[negativeRowOffset + negativeBranch.categoryRowTau.length];
+        positiveBranch.selectRowNodes(categoryRowsPerBranch);
+        negativeBranch.selectRowNodes(categoryRowsPerBranch);
+        negativeRowOffset = positiveBranch.rowTau.length;
+        double[] rowSignedT = new double[negativeRowOffset + negativeBranch.rowTau.length];
         for (int row = 0; row < rowSignedT.length; row++) {
             CategoryTiltBranch branch = row < negativeRowOffset ? positiveBranch : negativeBranch;
             int branchRow = row < negativeRowOffset ? row : row - negativeRowOffset;
-            rowSignedT[row] = branch.signOfT * branch.categoryRowTau[branchRow];
+            rowSignedT[row] = branch.signOfT * branch.rowTau[branchRow];
         }
         table = new CategoryTable(scaledValues, uniqueWeights, rowSignedT, params.categoryBlockSize());
     }
@@ -65,8 +65,8 @@ final class CategoryFamily {
         boolean positive = signedT >= 0;
         CategoryTiltBranch branch = positive ? positiveBranch : negativeBranch;
         int rowOffset = positive ? 0 : negativeRowOffset;
-        double[] categoryRowTau = branch.categoryRowTau;
-        int lastRowPosition = categoryRowTau.length - 1;
+        double[] rowTau = branch.rowTau;
+        int lastRowPosition = rowTau.length - 1;
         double tau = Math.min(Math.abs(signedT), branch.saturationTau);
         branch.interpolate(tau, out.interpolationScratch);
         out.logPartition = out.interpolationScratch[0];
@@ -76,12 +76,12 @@ final class CategoryFamily {
         int lowerCategoryRow;
         double effectiveMeanGap;
         int mixThreshold = 0;
-        if (tau >= categoryRowTau[lastRowPosition]) {
+        if (tau >= rowTau[lastRowPosition]) {
             lowerCategoryRow = lastRowPosition;
             effectiveMeanGap = branch.signOfT
                     * (table.rowMeanScaledValue(rowOffset + lastRowPosition) - branch.referenceValue);
         } else {
-            lowerCategoryRow = SortedSearch.bracket(categoryRowTau, tau);
+            lowerCategoryRow = SortedSearch.bracket(rowTau, tau);
             // Mix the two stored rows so the realized mean gap equals the exact interpolated mean gap at tau.
             double meanGapAtLowerRow = branch.signOfT
                     * (table.rowMeanScaledValue(rowOffset + lowerCategoryRow) - branch.referenceValue);
