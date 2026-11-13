@@ -1,19 +1,15 @@
 package io.github.aevns.fastmaxent;
 
 /**
- * Stored label distributions p(k | t) ~ W_k exp(-t x_k) for a fixed set of rows t_r, one per row.
- * Each row is a coarse CDF (one entry per block of unique values); drawing finds the block by binary search
- * and then picks within the block exactly by recomputing its few weights. This cuts memory by the block size
- * with no approximation beyond the 32-bit CDF quantization.
+ * Stored category distributions p(k | t) ~ W_k exp(-t x_k), one row per t. Each row is a CDF over blocks of unique
+ * values; a draw finds the block, then picks within it by recomputing its few weights, so memory shrinks by the block
+ * size with no approximation beyond 32-bit quantization.
  */
-final class LabelTable {
+final class CategoryTable {
     private final int uniqueCount, blockSize, blocksPerRow;
     /** Interleaved [W_0, x_0, W_1, x_1, ...] for cache-friendly block scans. */
     private final double[] interleavedWeightAndScaledValue;
-    /**
-     * rowCount x blocksPerRow, unsigned 32-bit fixed point xor Integer.MIN_VALUE so signed comparison works.
-     * MAX_UNSIGNED stands for a CDF of 1 (2^32, which 32 bits cannot hold); blocks after the first such block are empty.
-     */
+    /** rowCount x blocksPerRow; each row is a {@link FixedPointCdf} over its blocks. */
     private final int[] blockCdf;
     private final double[] rowSignedT;
     /** Realized E[x] of each row under the quantized CDF. */
@@ -23,15 +19,15 @@ final class LabelTable {
         return (uniqueCount + blockSize - 1) / blockSize;
     }
 
-    LabelTable(double[] scaledValues, double[] labelPriorWeights, double[] rowSignedT, int blockSize) {
+    CategoryTable(double[] scaledValues, double[] uniqueWeights, double[] rowSignedT, int blockSize) {
         this.uniqueCount = scaledValues.length;
         this.blockSize = blockSize;
         this.blocksPerRow = blocksPerRow(uniqueCount, blockSize);
         this.rowSignedT = rowSignedT;
         interleavedWeightAndScaledValue = new double[2 * uniqueCount];
-        for (int i = 0; i < uniqueCount; i++) {
-            interleavedWeightAndScaledValue[2 * i] = labelPriorWeights[i];
-            interleavedWeightAndScaledValue[2 * i + 1] = scaledValues[i];
+        for (int k = 0; k < uniqueCount; k++) {
+            interleavedWeightAndScaledValue[2 * k] = uniqueWeights[k];
+            interleavedWeightAndScaledValue[2 * k + 1] = scaledValues[k];
         }
         blockCdf = new int[rowSignedT.length * blocksPerRow];
         buildBlockCdf();
@@ -56,6 +52,7 @@ final class LabelTable {
 
     private void buildBlockCdf() {
         double[] weights = new double[uniqueCount];
+        double[] blockCumulativeWeight = new double[blocksPerRow];
         for (int row = 0; row < rowSignedT.length; row++) {
             double t = rowSignedT[row];
             double reference = referenceValue(t, 0, uniqueCount);
@@ -66,17 +63,12 @@ final class LabelTable {
                 totalWeight += weights[k];
             }
             double cumulativeWeight = 0;
-            long previousCdf = 0;
             for (int block = 0; block < blocksPerRow; block++) {
                 int blockStart = block * blockSize, blockEnd = Math.min(blockStart + blockSize, uniqueCount);
                 for (int k = blockStart; k < blockEnd; k++) cumulativeWeight += weights[k];
-                long cdfFixedPoint = Math.round(cumulativeWeight / totalWeight * FixedPoint.SCALE);
-                if (cdfFixedPoint > FixedPoint.MAX_UNSIGNED) cdfFixedPoint = FixedPoint.MAX_UNSIGNED;
-                if (cdfFixedPoint < previousCdf) cdfFixedPoint = previousCdf;
-                if (block == blocksPerRow - 1) cdfFixedPoint = FixedPoint.MAX_UNSIGNED;
-                previousCdf = cdfFixedPoint;
-                blockCdf[row * blocksPerRow + block] = ((int) cdfFixedPoint) ^ Integer.MIN_VALUE;
+                blockCumulativeWeight[block] = cumulativeWeight;
             }
+            FixedPointCdf.encode(blockCumulativeWeight, 0, blocksPerRow, totalWeight, blockCdf, row * blocksPerRow);
         }
     }
 
@@ -84,18 +76,9 @@ final class LabelTable {
      * Draws a unique-value index from the given row. The high 32 bits of the random long locate the block in
      * the coarse CDF; the low 32 bits pick within the block.
      */
-    int sampleUniqueIndex(int row, long random) {
-        // Capped one below MAX_UNSIGNED: the block that reaches the ceiling stores MAX_UNSIGNED but stands for 2^32,
-        // so it must also take the top key. Uncapped, that key would fall through to the last block, giving it 2^-32
-        // of mass even when it should have none.
-        int cdfKey = Math.min(((int) FixedPoint.highBits(random)) ^ Integer.MIN_VALUE, Integer.MAX_VALUE - 1);
-        int rowOffset = row * blocksPerRow;
-        int low = 0, high = blocksPerRow - 1;
-        while (low < high) {
-            int middle = (low + high) >>> 1;
-            if (blockCdf[rowOffset + middle] > cdfKey) high = middle; else low = middle + 1;
-        }
-        int blockStart = low * blockSize, blockEnd = Math.min(blockStart + blockSize, uniqueCount);
+    int drawUniqueIndex(int row, long random) {
+        int block = FixedPointCdf.search(blockCdf, row * blocksPerRow, blocksPerRow, FixedPoint.highBits(random));
+        int blockStart = block * blockSize, blockEnd = Math.min(blockStart + blockSize, uniqueCount);
         double t = rowSignedT[row];
         double reference = referenceValue(t, blockStart, blockEnd);
         double[] blockWeights = new double[blockSize];
@@ -117,7 +100,7 @@ final class LabelTable {
     }
 
     /**
-     * The exact distribution over unique values that sampleUniqueIndex realizes for this row: each block's
+     * The exact distribution over unique values that drawUniqueIndex realizes for this row: each block's
      * mass comes from the quantized CDF, and within a block mass is proportional to the prior-times-tilt weights.
      */
     double[] rowDistribution(int row) {
@@ -125,9 +108,8 @@ final class LabelTable {
         double t = rowSignedT[row];
         double previousCdf = 0;
         for (int block = 0; block < blocksPerRow; block++) {
-            long storedCdf = Integer.toUnsignedLong(blockCdf[row * blocksPerRow + block] ^ Integer.MIN_VALUE);
-            double currentCdf = storedCdf == FixedPoint.MAX_UNSIGNED ? FixedPoint.SCALE : storedCdf;
-            double blockMass = (currentCdf - previousCdf) / FixedPoint.SCALE;
+            double currentCdf = FixedPointCdf.probabilityAt(blockCdf, row * blocksPerRow + block);
+            double blockMass = currentCdf - previousCdf;
             previousCdf = currentCdf;
             if (blockMass <= 0) continue;
             int blockStart = block * blockSize, blockEnd = Math.min(blockStart + blockSize, uniqueCount);
