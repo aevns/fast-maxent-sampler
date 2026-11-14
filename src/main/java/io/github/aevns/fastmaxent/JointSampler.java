@@ -11,8 +11,11 @@ import java.util.random.RandomGenerator;
  *   p(null) ~ m(0),   p(c, q) ~ w_c m(q) exp(-lambda q - beta q v_c)   (q != 0)
  * <p>
  * Immutable once initialized; sampling is thread-safe if each caller supplies its own {@link RandomGenerator}.
+ * <p>
+ * For a single, deterministic quantity (no count distribution, no null state), where only E[V] = target needs to be
+ * met, see {@link CategorySampler} instead: it skips the quantity side entirely and builds correspondingly faster.
  */
-public final class MaxEntSampler {
+public final class JointSampler {
     /**
      * Result of a draw.
      *  Indices correspond to the values and quantities arrays being sampled from.
@@ -46,7 +49,7 @@ public final class MaxEntSampler {
      * @param expectedQuantities   the supported n, each strictly between the smallest and largest quantity
      * @param params               table tuning parameters
      */
-    public MaxEntSampler(double[] values, double[] categoryPriorWeights, double[] quantities,
+    public JointSampler(double[] values, double[] categoryPriorWeights, double[] quantities,
                          double[] quantityPriorWeights, double[] expectedQuantities, TableParams params) {
         if (values.length == 0) throw new IllegalArgumentException("no values");
         if (expectedQuantities.length == 0) throw new IllegalArgumentException("no expected quantities");

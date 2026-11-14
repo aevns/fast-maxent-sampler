@@ -22,8 +22,8 @@ import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-@DisplayName("Tests for the public MaxEntSampler class")
-public class MaxEntSamplerTest {
+@DisplayName("Tests for the public JointSampler class")
+public class JointSamplerTest {
     static final long SEED = 0;
     static final String EMC_DATA_PATH = "/mc_pe_emc.txt";
     static final int DRAWS = 500_000;
@@ -43,7 +43,7 @@ public class MaxEntSamplerTest {
     static final double[] EMC_VALUES = loadValues();
 
     static double[] loadValues() {
-        try (var stream = MaxEntSamplerTest.class.getResourceAsStream(EMC_DATA_PATH)) {
+        try (var stream = JointSamplerTest.class.getResourceAsStream(EMC_DATA_PATH)) {
             assertNotNull(stream);
             return new BufferedReader(new InputStreamReader(stream))
                     .lines().mapToDouble(Double::parseDouble).toArray();
@@ -64,8 +64,8 @@ public class MaxEntSamplerTest {
             changes.accept(this);
         }
 
-        MaxEntSampler build() {
-            return new MaxEntSampler(values, categoryPrior.weights(values), quantities,
+        JointSampler build() {
+            return new JointSampler(values, categoryPrior.weights(values), quantities,
                     quantityPrior.weights(quantities), expectedQuantities, params);
         }
 
@@ -134,7 +134,7 @@ public class MaxEntSamplerTest {
         SplittableRandom random = new SplittableRandom(SEED);
         double[] values = configuration.values, quantities = configuration.quantities;
         double[] expectedQuantities = configuration.expectedQuantities;
-        MaxEntSampler sampler = configuration.build();
+        JointSampler sampler = configuration.build();
         List<Executable> checks = new ArrayList<>();
         for (int n = 0; n < expectedQuantities.length; n++) {
             double setN = expectedQuantities[n];
@@ -177,7 +177,7 @@ public class MaxEntSamplerTest {
     void withinGroupWeights() {
         double[] values = {1, 1, 1, 2, 2};
         double[] categoryWeights = {1, 2, 3, 4, 4};
-        MaxEntSampler sampler = new MaxEntSampler(values, categoryWeights, new double[] {0, 1}, new double[] {1, 1},
+        JointSampler sampler = new JointSampler(values, categoryWeights, new double[] {0, 1}, new double[] {1, 1},
                 new double[] {0.5}, TableParams.DEFAULT);
         SplittableRandom random = new SplittableRandom(SEED);
         double s = 0.5 * (sampler.minTargetS(0) + sampler.maxTargetS(0));
@@ -210,7 +210,7 @@ public class MaxEntSamplerTest {
         SplittableRandom random = new SplittableRandom(SEED);
 
         long start = System.nanoTime();
-        MaxEntSampler sampler = new Case("default", c -> {}).build();
+        JointSampler sampler = new Case("default", c -> {}).build();
         long loadTimer = System.nanoTime() - start;
 
         int[] nSet = new int[DRAWS];
@@ -224,7 +224,7 @@ public class MaxEntSamplerTest {
         //warmup
         long dummy = 0;
         for (int i = 0; i < DRAWS; i++) {
-            MaxEntSampler.Sample sample = sampler.sample(nSet[i], sSet[i], random);
+            JointSampler.Sample sample = sampler.sample(nSet[i], sSet[i], random);
             dummy += sample.quantityIndex + sample.categoryIndex;
         }
 
@@ -237,7 +237,7 @@ public class MaxEntSamplerTest {
             int n = nSet[i];
             double s = sSet[i];
             start = System.nanoTime();
-            MaxEntSampler.Sample sample = sampler.sample(n, s, random);
+            JointSampler.Sample sample = sampler.sample(n, s, random);
             coldTimer += System.nanoTime() - start;
             dummy += sample.quantityIndex + sample.categoryIndex;
         }
@@ -245,7 +245,7 @@ public class MaxEntSamplerTest {
         //warm
         start = System.nanoTime();
         for (int i = 0; i < DRAWS; i++) {
-            MaxEntSampler.Sample sample = sampler.sample(nSet[i], sSet[i], random);
+            JointSampler.Sample sample = sampler.sample(nSet[i], sSet[i], random);
             dummy += sample.quantityIndex + sample.categoryIndex;
         }
         long warmTimer = System.nanoTime() - start;
