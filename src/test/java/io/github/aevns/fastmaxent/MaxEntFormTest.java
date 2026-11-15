@@ -41,7 +41,7 @@ class MaxEntFormTest {
     void quantityAndCategoryDistributionsHaveMaxEntForm(Case test) {
         double[] logPrior = Arrays.stream(test.quantities).map(q -> Math.log(1 + Math.abs(q))).toArray();
         QuantityDistributionSolver solver =
-                new QuantityDistributionSolver(FAMILY, new QuantitySet(test.quantities), logPrior);
+                new QuantityDistributionSolver(FAMILY, new QuantitySet(test.quantities, false), logPrior);
         solver.configureForBeta(test.beta);
         solver.solveLambdaForExpectedQuantity(test.expectedQuantity);
         double[] p = solver.stateProbabilities;
@@ -66,7 +66,6 @@ class MaxEntFormTest {
         // block with no mass at all.
         CategoryFamily.Point point = new CategoryFamily.Point();
         for (double q : test.quantities) {
-            if (q == 0) continue;
             double t = test.beta * q;
             FAMILY.evaluateAtT(t, point);
             double mix = FixedPoint.toProbability(point.mixThreshold);

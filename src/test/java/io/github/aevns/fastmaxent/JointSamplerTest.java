@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.SplittableRandom;
 import java.util.function.Consumer;
@@ -32,13 +33,12 @@ public class JointSamplerTest {
     static final double TOLERANCE_SIGMA = 5;
     static final double TOLERANCE_EPSILON = 1e-9;
     static volatile long sink = 0;
-    /** 0..64, with 0 the null state. */
-    static final double[] DEFAULT_QUANTITIES = IntStream.rangeClosed(0, 64).asDoubleStream().toArray();
+    static final double[] DEFAULT_QUANTITIES = IntStream.rangeClosed(1, 64).asDoubleStream().toArray();
     static final double[] DEFAULT_EXPECTED_QUANTITIES = {0.25, 1, 4, 16};
     /** A threshold of 10 suits the EMC data. */
     static final Axis VALUE_AXIS = new Axis.Symlog(10), QUANTITY_AXIS = new Axis.Symlog(1);
-    static final DensityPrior CATEGORY_PRIOR = new DensityPrior(VALUE_AXIS, 0.15, 0.1, false, false, 1);
-    static final DensityPrior QUANTITY_PRIOR = new DensityPrior(QUANTITY_AXIS, 0.15, 1, true, true, 1);
+    static final DensityPrior CATEGORY_PRIOR = new DensityPrior(VALUE_AXIS, 0.15, 0.1, false, false);
+    static final DensityPrior QUANTITY_PRIOR = new DensityPrior(QUANTITY_AXIS, 0.15, 1, false, true);
 
     static final double[] EMC_VALUES = loadValues();
 
@@ -57,6 +57,8 @@ public class JointSamplerTest {
         double[] values = EMC_VALUES;
         double[] quantities = DEFAULT_QUANTITIES, expectedQuantities = DEFAULT_EXPECTED_QUANTITIES;
         DensityPrior categoryPrior = CATEGORY_PRIOR, quantityPrior = QUANTITY_PRIOR;
+        /** null means derive the null-state weight from quantityPrior itself, by treating it as an implied 0. */
+        Double nullStateWeight = null;
         TableParams params = TableParams.DEFAULT;
 
         Case(String name, Consumer<Case> changes) {
@@ -65,8 +67,14 @@ public class JointSamplerTest {
         }
 
         JointSampler build() {
+            double[] quantitiesWithImpliedZero = Arrays.copyOf(quantities, quantities.length + 1);
+            quantitiesWithImpliedZero[quantities.length] = 0;
+            double[] weightsWithImpliedZero = quantityPrior.weights(quantitiesWithImpliedZero);
+            double[] quantityPriorWeights = Arrays.copyOf(weightsWithImpliedZero, quantities.length);
+            double resolvedNullStateWeight =
+                    nullStateWeight != null ? nullStateWeight : weightsWithImpliedZero[quantities.length];
             return new JointSampler(values, categoryPrior.weights(values), quantities,
-                    quantityPrior.weights(quantities), expectedQuantities, params);
+                    quantityPriorWeights, resolvedNullStateWeight, expectedQuantities, params);
         }
 
         @Override public String toString() { return name; }
@@ -84,17 +92,11 @@ public class JointSamplerTest {
                 new Case("minimal categoryTableBudgetBytes",
                         c -> c.params = new TableParams(1e-5, 256, 8, 1, 3000)),
                 new Case("category similarity = 0",
-                        c -> c.categoryPrior = new DensityPrior(
-                                VALUE_AXIS, 0.15, 0, false, false, 1)),
+                        c -> c.categoryPrior = new DensityPrior(VALUE_AXIS, 0.15, 0, false, false)),
                 new Case("category similarity = 1",
-                        c -> c.categoryPrior = new DensityPrior(
-                                VALUE_AXIS, 0.15, 1, false, false, 1)),
-                new Case("null-state weight = 0.000_01",
-                        c -> c.quantityPrior = new DensityPrior(
-                                QUANTITY_AXIS, 0.15, 1, true, true, 0.000_01)),
-                new Case("null-state weight = 100_000",
-                        c -> c.quantityPrior = new DensityPrior(
-                                QUANTITY_AXIS, 0.15, 1, true, true, 100_000)),
+                        c -> c.categoryPrior = new DensityPrior(VALUE_AXIS, 0.15, 1, false, false)),
+                new Case("null-state weight = 0.000_01", c -> c.nullStateWeight = 0.000_01),
+                new Case("null-state weight = 100_000", c -> c.nullStateWeight = 100_000.0),
                 new Case("two unique values",
                         c -> c.values = new double[] {1, 1, 1, 2, 2}),
                 new Case("values spanning 12 decades",
@@ -118,6 +120,7 @@ public class JointSamplerTest {
                         c -> {
                     c.quantities = IntStream.rangeClosed(1, 64).asDoubleStream().toArray();
                     c.expectedQuantities = new double[] {1.5, 4, 16};
+                    c.nullStateWeight = 0.0;
                 }),
                 new Case("unsorted quantities",
                         c -> {
@@ -146,9 +149,10 @@ public class JointSamplerTest {
                 int inconsistentSamples = 0;
                 for (int j = 1; j <= DRAWS; j++) {
                     var sample = sampler.sample(n, setS, random);
-                    double quantity = quantities[sample.quantityIndex];
-                    boolean nullMismatch = (sample.categoryIndex < 0) != (quantity == 0);
+                    boolean isNull = sample.quantityIndex < 0;
+                    boolean nullMismatch = isNull != (sample.categoryIndex < 0);
                     if (nullMismatch) inconsistentSamples++;
+                    double quantity = isNull ? 0 : quantities[sample.quantityIndex];
                     double nv = sample.categoryIndex >= 0 ? quantity * values[sample.categoryIndex] : 0;
                     double dN = quantity - meanN;
                     meanN += dN / j;
@@ -166,7 +170,7 @@ public class JointSamplerTest {
                 checks.add(() -> assertEquals(setN, observedN, toleranceN, "<N> at " + cell));
                 checks.add(() -> assertEquals(setS, observedNV, toleranceNV, "<NV> at " + cell));
                 checks.add(() -> assertEquals(0, inconsistent,
-                        "samples whose quantity and null-state category disagree at " + cell));
+                        "samples whose quantityIndex and categoryIndex disagree about the null outcome at " + cell));
             }
         }
         assertAll(configuration.name, checks);
@@ -178,7 +182,7 @@ public class JointSamplerTest {
         double[] values = {1, 1, 1, 2, 2};
         double[] categoryWeights = {1, 2, 3, 4, 4};
         JointSampler sampler = new JointSampler(values, categoryWeights, new double[] {0, 1}, new double[] {1, 1},
-                new double[] {0.5}, TableParams.DEFAULT);
+                0, new double[] {0.5}, TableParams.DEFAULT);
         SplittableRandom random = new SplittableRandom(SEED);
         double s = 0.5 * (sampler.minTargetS(0) + sampler.maxTargetS(0));
         long[] hits = new long[values.length];

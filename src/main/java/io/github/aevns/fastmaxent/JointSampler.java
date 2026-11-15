@@ -5,15 +5,17 @@ import java.util.random.RandomGenerator;
 /**
  * Draws a category and a quantity from the maximum-entropy distribution relative to a prior, with E[N] = n and
  * E[N V] = s for quantity N and category value V. n is one of a set fixed at construction; s can be any value in the
- * supported range. Quantity 0, if allowed, is a null state with no category.
+ * supported range. An optional null outcome draws neither a quantity nor a category, with its own prior weight,
+ * independent of whether 0 is itself one of the allowed quantities.
  * <p>
- * With category prior w and quantity prior m:
- *   p(null) ~ m(0),   p(c, q) ~ w_c m(q) exp(-lambda q - beta q v_c)   (q != 0)
+ * With category prior w, quantity prior m and null-outcome weight m_null:
+ *   p(null) ~ m_null,   p(c, q) ~ w_c m(q) exp(-lambda q - beta q v_c)
  * <p>
  * Immutable once initialized; sampling is thread-safe if each caller supplies its own {@link RandomGenerator}.
  * <p>
- * For a single, deterministic quantity (no count distribution, no null state), where only E[V] = target needs to be
- * met, see {@link CategorySampler} instead: it skips the quantity side entirely and builds correspondingly faster.
+ * For a single, deterministic quantity (no count distribution, no null outcome), where only E[V] = target needs to
+ * be met, see {@link CategorySampler} instead: it skips the quantity side entirely and builds correspondingly
+ * faster.
  */
 public final class JointSampler {
     /**
@@ -21,9 +23,9 @@ public final class JointSampler {
      *  Indices correspond to the values and quantities arrays being sampled from.
      * */
     public static final class Sample {
-        /** Index into the values array, or -1 for the null state. */
+        /** Index into the values array, or -1 for the null outcome. */
         public final int categoryIndex;
-        /** Index into the quantities array. */
+        /** Index into the quantities array, or -1 for the null outcome. */
         public final int quantityIndex;
 
         Sample(int categoryIndex, int quantityIndex) {
@@ -43,19 +45,26 @@ public final class JointSampler {
      *
      * @param values               the value of each category; positive, sorted ascending, at least two distinct
      * @param categoryPriorWeights prior weight of each category; positive, any scale
-     * @param quantities           allowed quantities; distinct, any order, may be negative or non-integer; include 0
-     *                             to allow the null state
+     * @param quantities           allowed quantities; distinct, any order, may be negative or non-integer, may
+     *                             include 0 (which is then an ordinary quantity, not the null outcome)
      * @param quantityPriorWeights prior weight of each quantity; positive, any scale
-     * @param expectedQuantities   the supported n, each strictly between the smallest and largest quantity
+     * @param nullStateWeight      prior weight of the null outcome (no quantity, no category), on the same scale as
+     *                             quantityPriorWeights; 0 to disallow it
+     * @param expectedQuantities   the supported n, each strictly between the smallest and largest value among the
+     *                             quantities and, if the null outcome is allowed, its implicit 0
      * @param params               table tuning parameters
      */
     public JointSampler(double[] values, double[] categoryPriorWeights, double[] quantities,
-                         double[] quantityPriorWeights, double[] expectedQuantities, TableParams params) {
+                         double[] quantityPriorWeights, double nullStateWeight, double[] expectedQuantities,
+                         TableParams params) {
         if (values.length == 0) throw new IllegalArgumentException("no values");
         if (expectedQuantities.length == 0) throw new IllegalArgumentException("no expected quantities");
-        QuantitySet quantitySet = new QuantitySet(quantities);
+        if (!(nullStateWeight >= 0) || Double.isInfinite(nullStateWeight))
+            throw new IllegalArgumentException("null-state weight must be non-negative and finite");
+        boolean hasNullState = nullStateWeight > 0;
+        QuantitySet quantitySet = new QuantitySet(quantities, hasNullState);
         for (double expectedQuantity : expectedQuantities) quantitySet.requireReachable(expectedQuantity);
-        if (quantityPriorWeights.length != quantitySet.stateCount)
+        if (quantityPriorWeights.length != quantities.length)
             throw new IllegalArgumentException("one quantity weight per quantity required");
         nullStateIndex = quantitySet.nullStateIndex;
 
@@ -68,12 +77,13 @@ public final class JointSampler {
         categoryTable = categoryFamily.table();
 
         double[] logQuantityPrior = new double[quantitySet.stateCount];
-        for (int state = 0; state < logQuantityPrior.length; state++) {
+        for (int state = 0; state < quantityPriorWeights.length; state++) {
             double weight = quantityPriorWeights[state];
             if (!(weight > 0) || Double.isInfinite(weight))
                 throw new IllegalArgumentException("quantity weights must be positive and finite");
             logQuantityPrior[state] = Math.log(weight);
         }
+        if (hasNullState) logQuantityPrior[nullStateIndex] = Math.log(nullStateWeight);
         quantityTables = new QuantityTable[expectedQuantities.length];
         for (int i = 0; i < quantityTables.length; i++)
             quantityTables[i] = QuantityTableBuilder.build(expectedQuantities[i], quantitySet, categoryFamily,
@@ -89,7 +99,7 @@ public final class JointSampler {
         long stateAndCategoryRow =
                 quantityTables[expectedQuantityIndex].drawStateAndCategoryRow(s * inverseValueScale, rng);
         int state = (int) (stateAndCategoryRow >>> 32);
-        if (state == nullStateIndex) return new Sample(-1, state);
+        if (state == nullStateIndex) return new Sample(-1, -1);
         int uniqueIndex = categoryTable.drawUniqueIndex((int) stateAndCategoryRow, rng.nextLong());
         return new Sample(groups.drawEntryIndex(uniqueIndex, rng), state);
     }

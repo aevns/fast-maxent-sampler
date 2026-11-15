@@ -45,8 +45,7 @@ final class QuantityDistributionSolver {
         categoryFamily.evaluateAtT(beta * quantities.values[anchorState], categoryPoint);
         double sharedReference = categoryPoint.referenceValue;
         for (int state = 0; state < quantities.stateCount; state++) {
-            double quantity = quantities.values[state];
-            if (quantity == 0) {
+            if (state == quantities.nullStateIndex) {
                 logWeightBeforeLambda[state] = logPrior[state];
                 meanScaledValueGivenState[state] = 0;
                 varianceScaledValueGivenState[state] = 0;
@@ -54,6 +53,7 @@ final class QuantityDistributionSolver {
                 categoryRowMixThreshold[state] = 0;
                 continue;
             }
+            double quantity = quantities.values[state];
             double t = beta * quantity;
             categoryFamily.evaluateAtT(t, categoryPoint);
             varianceScaledValueGivenState[state] = categoryPoint.varianceScaledValue;

@@ -56,9 +56,9 @@ public final class CategorySampler {
     public int sample(double target, RandomGenerator rng) {
         double scaledMean = target * inverseValueScale;
         int lowerRow = lowerSortedRow(scaledMean);
-        double upperRowMixProbability = upperRowWeight(scaledMean, lowerRow);
+        int upperRowMixThreshold = FixedPoint.fromProbability(upperRowWeight(scaledMean, lowerRow));
         int sortedRow = lowerRow;
-        if (FixedPoint.highBits(rng.nextLong()) < (long) (upperRowMixProbability * FixedPoint.SCALE)) sortedRow++;
+        if (FixedPoint.isBelow(FixedPoint.highBits(rng.nextLong()), upperRowMixThreshold)) sortedRow++;
         int uniqueIndex = categoryTable.drawUniqueIndex(rowOfSortedIndex[sortedRow], rng.nextLong());
         return groups.drawEntryIndex(uniqueIndex, rng);
     }

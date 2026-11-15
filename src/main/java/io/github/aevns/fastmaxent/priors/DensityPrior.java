@@ -15,16 +15,13 @@ import java.util.Arrays;
  * @param halfWidth          kernel half-width, as a difference between values that the axis scales to positions:
  *                           0.15 on a symlog axis means neighbours within 15%
  * @param similarity         sigma, in [0, 1]
- * @param continueBeyondEnds for sets that truncate a longer sequence (such as quantities 1..64): extends the values
- *                           past each outer end at their outermost spacing, so the end values are not treated as
- *                           uncrowded
- * @param zeroIsNullState    whether values equal to 0 are a separate null state, off the axis; otherwise 0 is an
- *                           ordinary value
- * @param nullStateWeight    with a null state, the weight its values share, with the other values scaled to mean 1;
- *                           positive
+ * @param continueLow        for sets that truncate a longer sequence below their smallest value (such as quantities
+ *                           1..64, truncated at 1): extends the values below the low end at its outermost spacing,
+ *                           so the low end is not treated as uncrowded
+ * @param continueHigh       likewise, for sets truncated above their largest value
  */
-public record DensityPrior(Axis axis, double halfWidth, double similarity, boolean continueBeyondEnds,
-                           boolean zeroIsNullState, double nullStateWeight) {
+public record DensityPrior(Axis axis, double halfWidth, double similarity, boolean continueLow,
+                           boolean continueHigh) {
 
     /** Guards against outermost values spaced too finely to continue. */
     private static final int MAX_CONTINUED_VALUES = 1 << 20;
@@ -35,35 +32,14 @@ public record DensityPrior(Axis axis, double halfWidth, double similarity, boole
         if (!(positionHalfWidth > 0) || Double.isInfinite(positionHalfWidth))
             throw new IllegalArgumentException("half-width must scale to a positive, finite width");
         if (!(similarity >= 0 && similarity <= 1)) throw new IllegalArgumentException("similarity must be in [0, 1]");
-        if (!(nullStateWeight > 0) || Double.isInfinite(nullStateWeight))
-            throw new IllegalArgumentException("null-state weight must be positive and finite");
     }
 
     /**
-     * Weight of each value, in the order given: summing to 1, or with a null state, the other values averaging 1.
+     * Weight of each value, in the order given, summing to 1.
      *
      * @param values finite, in any order; duplicates allowed
      */
     public double[] weights(double[] values) {
-        if (!zeroIsNullState) return densityWeights(values);
-        int zeroCount = 0;
-        for (double value : values) if (value == 0) zeroCount++;
-        int nonzeroCount = values.length - zeroCount;
-        double[] result = new double[values.length];
-        double[] nonzero = new double[nonzeroCount];
-        for (int i = 0, next = 0; i < values.length; i++) {
-            if (values[i] == 0) result[i] = nullStateWeight / zeroCount;
-            else nonzero[next++] = values[i];
-        }
-        if (nonzeroCount == 0) return result;
-        double[] nonzeroWeights = densityWeights(nonzero);
-        for (int i = 0, next = 0; i < values.length; i++)
-            if (values[i] != 0) result[i] = nonzeroWeights[next++] * nonzeroCount;
-        return result;
-    }
-
-    /** Weight of each value, in the order given, summing to 1. */
-    private double[] densityWeights(double[] values) {
         int valueCount = values.length;
         if (valueCount == 0) throw new IllegalArgumentException("no values");
         double positionHalfWidth = axis.scale(halfWidth);
@@ -83,8 +59,8 @@ public record DensityPrior(Axis axis, double halfWidth, double similarity, boole
         }
 
         int last = uniqueCount - 1;
-        boolean lowSideContinues = continueBeyondEnds && uniqueCount >= 2 && unique[1] < 0;
-        boolean highSideContinues = continueBeyondEnds && uniqueCount >= 2 && unique[last - 1] > 0;
+        boolean lowSideContinues = continueLow && uniqueCount >= 2;
+        boolean highSideContinues = continueHigh && uniqueCount >= 2;
         double lowGap = lowSideContinues ? unique[1] - unique[0] : 0;
         double highGap = highSideContinues ? unique[last] - unique[last - 1] : 0;
         int lowContinued = lowSideContinues ? continuedValueCount(unique[0], -lowGap, axis, positionHalfWidth) : 0;

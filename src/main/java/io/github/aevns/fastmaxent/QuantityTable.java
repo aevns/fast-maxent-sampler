@@ -36,7 +36,7 @@ final class QuantityTable {
     /**
      * rows[r] must have been produced by packRow for the row whose target is unsortedScaledTargets[r]. Rows may be
      * given in any order; they are stored sorted by target, which lowerTargetRow's bracketing search relies on.
-     * nullStateIndex is the state that has no category (quantity 0), or -1.
+     * nullStateIndex is the state that stands for the null outcome (no category drawn), or -1.
      */
     QuantityTable(int stateCount, int nullStateIndex, double[] unsortedScaledTargets, int[][] rows) {
         this.stateCount = stateCount;

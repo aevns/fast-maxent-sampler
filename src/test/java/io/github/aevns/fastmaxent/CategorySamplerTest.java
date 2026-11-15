@@ -27,7 +27,7 @@ class CategorySamplerTest {
 
     /** 40 scaled values over three decades. */
     static final double[] VALUES = IntStream.range(0, 40).mapToDouble(i -> Math.pow(10, 3.0 * i / 39)).toArray();
-    static final DensityPrior CATEGORY_PRIOR = new DensityPrior(new Axis.Symlog(10), 0.15, 0.1, false, false, 1);
+    static final DensityPrior CATEGORY_PRIOR = new DensityPrior(new Axis.Symlog(10), 0.15, 0.1, false, false);
 
     static CategorySampler build() {
         return new CategorySampler(VALUES, CATEGORY_PRIOR.weights(VALUES), TableParams.DEFAULT);
