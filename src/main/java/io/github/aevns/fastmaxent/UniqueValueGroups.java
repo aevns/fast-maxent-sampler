@@ -13,8 +13,12 @@ final class UniqueValueGroups {
     final int[] groupStartIndex, groupSize;
     /** Prior mass of each unique value: the sum of its entries' weights, normalized to sum to 1. */
     final double[] uniqueWeights;
-    /** Mean over all entries (not over unique values), summed in entry order. */
-    final double entryMean;
+    /**
+     * Mean absolute value over all entries (not over unique values): always positive, so it's safe to scale by
+     * regardless of the sign of the values themselves (unlike the signed mean, which could be zero or negative for
+     * mixed-sign values, and would then scale the values out of order).
+     */
+    final double entryAbsoluteMean;
     /** Per-group {@link FixedPointCdf} over the entries of groups with unequal weights; null if there are none. */
     private final int[] entryCdf;
     private final boolean[] weightedGroup;
@@ -24,8 +28,7 @@ final class UniqueValueGroups {
         if (entryWeights.length != entryCount)
             throw new IllegalArgumentException("one category weight per value required");
         for (int i = 0; i < entryCount; i++) {
-            if (!(sortedValues[i] > 0) || Double.isInfinite(sortedValues[i]))
-                throw new IllegalArgumentException("values must be positive and finite");
+            if (!Double.isFinite(sortedValues[i])) throw new IllegalArgumentException("values must be finite");
             if (i > 0 && sortedValues[i] < sortedValues[i - 1])
                 throw new IllegalArgumentException("values must be sorted");
             if (!(entryWeights[i] > 0) || Double.isInfinite(entryWeights[i]))
@@ -76,9 +79,9 @@ final class UniqueValueGroups {
             weightedGroup = null;
         }
 
-        double valueSum = 0;
-        for (double value : sortedValues) valueSum += value;
-        entryMean = valueSum / entryCount;
+        double absValueSum = 0;
+        for (double value : sortedValues) absValueSum += Math.abs(value);
+        entryAbsoluteMean = absValueSum / entryCount;
     }
 
     /** Picks an entry index within the group (consumes a random long only if the group has duplicates). */

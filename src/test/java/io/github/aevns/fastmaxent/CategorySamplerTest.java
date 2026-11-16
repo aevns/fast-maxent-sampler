@@ -3,11 +3,14 @@ package io.github.aevns.fastmaxent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.SplittableRandom;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import io.github.aevns.fastmaxent.priors.Axis;
 import io.github.aevns.fastmaxent.priors.DensityPrior;
@@ -27,17 +30,31 @@ class CategorySamplerTest {
 
     /** 40 scaled values over three decades. */
     static final double[] VALUES = IntStream.range(0, 40).mapToDouble(i -> Math.pow(10, 3.0 * i / 39)).toArray();
+    /** Mixed-sign values, including 0, such as energies measured relative to an arbitrary zero point. */
+    static final double[] MIXED_SIGN_VALUES = {-100, -50, -10, -1, -0.5, 0, 0.5, 1, 10, 50, 100};
     static final DensityPrior CATEGORY_PRIOR = new DensityPrior(new Axis.Symlog(10), 0.15, 0.1, false, false);
 
-    static CategorySampler build() {
-        return new CategorySampler(VALUES, CATEGORY_PRIOR.weights(VALUES), TableParams.DEFAULT);
+    record Config(String name, double[] values) {
+        @Override public String toString() { return name; }
     }
 
-    @Test
+    static Stream<Config> configs() {
+        return Stream.of(
+                new Config("log-spaced positive values", VALUES),
+                new Config("mixed-sign values", MIXED_SIGN_VALUES));
+    }
+
+    static CategorySampler build(double[] values) {
+        return new CategorySampler(values, CATEGORY_PRIOR.weights(values), TableParams.DEFAULT);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("configs")
     @DisplayName("Testing that <V> matches its target across the supported range")
-    void meanTests() {
+    void meanTests(Config config) {
+        double[] values = config.values();
         SplittableRandom random = new SplittableRandom(SEED);
-        CategorySampler sampler = build();
+        CategorySampler sampler = build(values);
         double minTarget = sampler.minTargetValue(), maxTarget = sampler.maxTargetValue();
         List<Executable> checks = new ArrayList<>();
         for (int step = 0; step < TARGET_STEPS; step++) {
@@ -45,7 +62,7 @@ class CategorySamplerTest {
             // Welford's running mean and variance
             double mean = 0, m2 = 0;
             for (int j = 1; j <= DRAWS; j++) {
-                double value = VALUES[sampler.sample(target, random)];
+                double value = values[sampler.sample(target, random)];
                 double delta = value - mean;
                 mean += delta / j;
                 m2 += delta * (value - mean);

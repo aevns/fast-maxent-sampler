@@ -22,14 +22,14 @@ public final class CategorySampler {
     /**
      * Builds the sampling table.
      *
-     * @param values               the value of each category; positive, sorted ascending, at least two distinct
+     * @param values               the value of each category; finite, sorted ascending, at least two distinct
      * @param priorWeights         prior weight of each category; positive, any scale
      * @param params               table tuning parameters
      */
     public CategorySampler(double[] values, double[] priorWeights, TableParams params) {
         if (values.length == 0) throw new IllegalArgumentException("no values");
         groups = new UniqueValueGroups(values, priorWeights);
-        valueScale = groups.entryMean;
+        valueScale = groups.entryAbsoluteMean;
         inverseValueScale = 1.0 / valueScale;
         double[] scaledValues = new double[groups.uniqueCount];
         for (int i = 0; i < groups.uniqueCount; i++) scaledValues[i] = groups.uniqueValues[i] * inverseValueScale;

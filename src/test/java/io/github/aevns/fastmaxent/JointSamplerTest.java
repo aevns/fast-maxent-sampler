@@ -52,7 +52,7 @@ public class JointSamplerTest {
         }
     }
 
-    static final class Case {
+    static final class Config {
         final String name;
         double[] values = EMC_VALUES;
         double[] quantities = DEFAULT_QUANTITIES, expectedQuantities = DEFAULT_EXPECTED_QUANTITIES;
@@ -61,7 +61,7 @@ public class JointSamplerTest {
         Double nullStateWeight = null;
         TableParams params = TableParams.DEFAULT;
 
-        Case(String name, Consumer<Case> changes) {
+        Config(String name, Consumer<Config> changes) {
             this.name = name;
             changes.accept(this);
         }
@@ -80,49 +80,51 @@ public class JointSamplerTest {
         @Override public String toString() { return name; }
     }
 
-    static Stream<Case> cases() {
+    static Stream<Config> configs() {
         double[] twelveDecades = new double[241];
         for (int i = 0; i < twelveDecades.length; i++) twelveDecades[i] = pow(10, 12.0 * i / (twelveDecades.length - 1));
         return Stream.of(
-                new Case("default", c -> {}),
-                new Case("categoryBlockSize = 1",
+                new Config("default", c -> {}),
+                new Config("categoryBlockSize = 1",
                         c -> c.params = new TableParams(1e-5, 256, 1, 20_000_000L, 3000)),
-                new Case("categoryBlockSize = 5 (partial last block)",
+                new Config("categoryBlockSize = 5 (partial last block)",
                         c -> c.params = new TableParams(1e-5, 256, 5, 20_000_000L, 3000)),
-                new Case("minimal categoryTableBudgetBytes",
+                new Config("minimal categoryTableBudgetBytes",
                         c -> c.params = new TableParams(1e-5, 256, 8, 1, 3000)),
-                new Case("category similarity = 0",
+                new Config("category similarity = 0",
                         c -> c.categoryPrior = new DensityPrior(VALUE_AXIS, 0.15, 0, false, false)),
-                new Case("category similarity = 1",
+                new Config("category similarity = 1",
                         c -> c.categoryPrior = new DensityPrior(VALUE_AXIS, 0.15, 1, false, false)),
-                new Case("null-state weight = 0.000_01", c -> c.nullStateWeight = 0.000_01),
-                new Case("null-state weight = 100_000", c -> c.nullStateWeight = 100_000.0),
-                new Case("two unique values",
+                new Config("null-state weight = 0.000_01", c -> c.nullStateWeight = 0.000_01),
+                new Config("null-state weight = 100_000", c -> c.nullStateWeight = 100_000.0),
+                new Config("two unique values",
                         c -> c.values = new double[] {1, 1, 1, 2, 2}),
-                new Case("values spanning 12 decades",
+                new Config("values spanning 12 decades",
                         c -> c.values = twelveDecades),
-                new Case("non-integer quantities",
+                new Config("mixed-sign category values",
+                        c -> c.values = new double[] {-100, -50, -10, -1, -0.5, 0, 0.5, 1, 10, 50, 100}),
+                new Config("non-integer quantities",
                         c -> {
                     c.quantities = new double[] {0, 0.5, 1, 1.5, 2.5, 4, 6.5};
                     c.expectedQuantities = new double[] {0.25, 1, 3};
                 }),
-                new Case("negative quantities",
+                new Config("negative quantities",
                         c -> {
                     c.quantities = IntStream.rangeClosed(-16, 0).asDoubleStream().toArray();
                     c.expectedQuantities = new double[] {-8, -1, -0.25};
                 }),
-                new Case("mixed-sign quantities",
+                new Config("mixed-sign quantities",
                         c -> {
                     c.quantities = new double[] {-4, -2, -1, 0, 1, 2, 4};
                     c.expectedQuantities = new double[] {-1, 0, 1.5};
                 }),
-                new Case("no null state",
+                new Config("no null state",
                         c -> {
                     c.quantities = IntStream.rangeClosed(1, 64).asDoubleStream().toArray();
                     c.expectedQuantities = new double[] {1.5, 4, 16};
                     c.nullStateWeight = 0.0;
                 }),
-                new Case("unsorted quantities",
+                new Config("unsorted quantities",
                         c -> {
                     c.quantities = new double[] {4, 0, 2, 1, 3};
                     c.expectedQuantities = new double[] {1, 2.5};
@@ -131,13 +133,13 @@ public class JointSamplerTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("cases")
+    @MethodSource("configs")
     @DisplayName("Testing that <N> and <NV> match their targets across a range of n and s for each test case")
-    void meanTests(Case configuration) {
+    void meanTests(Config config) {
         SplittableRandom random = new SplittableRandom(SEED);
-        double[] values = configuration.values, quantities = configuration.quantities;
-        double[] expectedQuantities = configuration.expectedQuantities;
-        JointSampler sampler = configuration.build();
+        double[] values = config.values, quantities = config.quantities;
+        double[] expectedQuantities = config.expectedQuantities;
+        JointSampler sampler = config.build();
         List<Executable> checks = new ArrayList<>();
         for (int n = 0; n < expectedQuantities.length; n++) {
             double setN = expectedQuantities[n];
@@ -173,7 +175,7 @@ public class JointSamplerTest {
                         "samples whose quantityIndex and categoryIndex disagree about the null outcome at " + cell));
             }
         }
-        assertAll(configuration.name, checks);
+        assertAll(config.name, checks);
     }
 
     @Test
@@ -214,7 +216,7 @@ public class JointSamplerTest {
         SplittableRandom random = new SplittableRandom(SEED);
 
         long start = System.nanoTime();
-        JointSampler sampler = new Case("default", c -> {}).build();
+        JointSampler sampler = new Config("default", c -> {}).build();
         long loadTimer = System.nanoTime() - start;
 
         int[] nSet = new int[DRAWS];

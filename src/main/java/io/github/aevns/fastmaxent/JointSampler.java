@@ -44,7 +44,7 @@ public final class JointSampler {
     /**
      * Builds the sampling tables.
      *
-     * @param categoryValues                the value of each category; positive, sorted ascending, at least two distinct
+     * @param categoryValues                the value of each category; finite, sorted ascending, at least two distinct
      * @param categoryPriorWeights          prior weight of each category; positive, any scale
      * @param quantities                    allowed quantities; distinct, any order, may be negative or non-integer, may
      *                                      include 0 (which is then an ordinary quantity, not the null outcome)
@@ -70,7 +70,7 @@ public final class JointSampler {
         nullStateIndex = quantitySet.nullStateIndex;
 
         groups = new UniqueValueGroups(categoryValues, categoryPriorWeights);
-        valueScale = groups.entryMean;
+        valueScale = groups.entryAbsoluteMean;
         inverseValueScale = 1.0 / valueScale;
         double[] scaledValues = new double[groups.uniqueCount];
         for (int i = 0; i < groups.uniqueCount; i++) scaledValues[i] = groups.uniqueValues[i] * inverseValueScale;
