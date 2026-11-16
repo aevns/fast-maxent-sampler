@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @DisplayName("Tests for the public CategorySampler class")
-class CategorySamplerTest {
+class ValueSamplerTest {
     static final long SEED = 0;
     static final int DRAWS = 200_000;
     static final int TARGET_STEPS = 7;
@@ -44,8 +44,8 @@ class CategorySamplerTest {
                 new Config("mixed-sign values", MIXED_SIGN_VALUES));
     }
 
-    static CategorySampler build(double[] values) {
-        return new CategorySampler(values, CATEGORY_PRIOR.weights(values), TableParams.DEFAULT);
+    static ValueSampler build(double[] values) {
+        return new ValueSampler(values, CATEGORY_PRIOR.weights(values), TableParams.DEFAULT);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -54,7 +54,7 @@ class CategorySamplerTest {
     void meanTests(Config config) {
         double[] values = config.values();
         SplittableRandom random = new SplittableRandom(SEED);
-        CategorySampler sampler = build(values);
+        ValueSampler sampler = build(values);
         double minTarget = sampler.minTargetValue(), maxTarget = sampler.maxTargetValue();
         List<Executable> checks = new ArrayList<>();
         for (int step = 0; step < TARGET_STEPS; step++) {
@@ -81,7 +81,7 @@ class CategorySamplerTest {
     void withinGroupWeights() {
         double[] values = {1, 1, 1, 2, 2};
         double[] categoryWeights = {1, 2, 3, 4, 4};
-        CategorySampler sampler = new CategorySampler(values, categoryWeights, TableParams.DEFAULT);
+        ValueSampler sampler = new ValueSampler(values, categoryWeights, TableParams.DEFAULT);
         SplittableRandom random = new SplittableRandom(SEED);
         double target = 0.5 * (sampler.minTargetValue() + sampler.maxTargetValue());
         long[] hits = new long[values.length];

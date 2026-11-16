@@ -15,7 +15,7 @@ import java.util.random.RandomGenerator;
  * Immutable once initialized; sampling is thread-safe if each caller supplies its own {@link RandomGenerator}.
  * <p>
  * For a single, deterministic quantity (no count distribution, no null outcome), where only E[V] = target needs to
- * be met, see {@link CategorySampler} instead: it skips the quantity side entirely and builds correspondingly
+ * be met, see {@link ValueSampler} instead: it skips the quantity side entirely and builds correspondingly
  * faster.
  */
 public final class JointSampler {

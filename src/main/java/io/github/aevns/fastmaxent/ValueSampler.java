@@ -12,7 +12,7 @@ import java.util.random.RandomGenerator;
  * <p>
  * Immutable once initialized; sampling is thread-safe if each caller supplies its own {@link RandomGenerator}.
  */
-public final class CategorySampler {
+public final class ValueSampler {
     private final UniqueValueGroups groups;
     private final double valueScale, inverseValueScale;
     private final CategoryTable categoryTable;
@@ -26,7 +26,7 @@ public final class CategorySampler {
      * @param priorWeights         prior weight of each category; positive, any scale
      * @param params               table tuning parameters
      */
-    public CategorySampler(double[] values, double[] priorWeights, TableParams params) {
+    public ValueSampler(double[] values, double[] priorWeights, TableParams params) {
         if (values.length == 0) throw new IllegalArgumentException("no values");
         groups = new UniqueValueGroups(values, priorWeights);
         valueScale = groups.entryAbsoluteMean;
