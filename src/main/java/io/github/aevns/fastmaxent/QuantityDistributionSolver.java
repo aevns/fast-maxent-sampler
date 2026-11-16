@@ -1,8 +1,8 @@
 package io.github.aevns.fastmaxent;
 
 /**
- * For a given beta, solves for the lambda at which p(q) ~ m(q) Z(beta q) exp(-lambda q) has the requested
- * mean. Arrays are indexed by state. Used only while building tables.
+ * For a given beta, solves for the lambda at which, for quantity index i with value q_i, p(i) ~ m_i Z(beta q_i)
+ * exp(-lambda q_i) has the requested mean. Arrays are indexed by state. Used only while building tables.
  */
 final class QuantityDistributionSolver {
     private final CategoryFamily categoryFamily;

@@ -8,8 +8,9 @@ import java.util.random.RandomGenerator;
  * supported range. An optional null outcome draws neither a quantity nor a category, with its own prior weight,
  * independent of whether 0 is itself one of the allowed quantities.
  * <p>
- * With category prior w, quantity prior m and null-outcome weight m_null:
- *   p(null) ~ m_null,   p(c, q) ~ w_c m(q) exp(-lambda q - beta q v_c)
+ * With category prior w, quantity prior m and null-outcome weight m_null: for category c with value v_c, and
+ * quantity index i with value q_i,
+ *   p(null) ~ m_null,   p(c, i) ~ w_c m_i exp(-lambda q_i - beta q_i v_c)
  * <p>
  * Immutable once initialized; sampling is thread-safe if each caller supplies its own {@link RandomGenerator}.
  * <p>
@@ -43,32 +44,32 @@ public final class JointSampler {
     /**
      * Builds the sampling tables.
      *
-     * @param values               the value of each category; positive, sorted ascending, at least two distinct
-     * @param categoryPriorWeights prior weight of each category; positive, any scale
-     * @param quantities           allowed quantities; distinct, any order, may be negative or non-integer, may
-     *                             include 0 (which is then an ordinary quantity, not the null outcome)
-     * @param quantityPriorWeights prior weight of each quantity; positive, any scale
-     * @param nullStateWeight      prior weight of the null outcome (no quantity, no category), on the same scale as
-     *                             quantityPriorWeights; 0 to disallow it
-     * @param expectedQuantities   the supported n, each strictly between the smallest and largest value among the
-     *                             quantities and, if the null outcome is allowed, its implicit 0
-     * @param params               table tuning parameters
+     * @param categoryValues                the value of each category; positive, sorted ascending, at least two distinct
+     * @param categoryPriorWeights          prior weight of each category; positive, any scale
+     * @param quantities                    allowed quantities; distinct, any order, may be negative or non-integer, may
+     *                                      include 0 (which is then an ordinary quantity, not the null outcome)
+     * @param quantityPriorWeights          prior weight of each quantity; positive, any scale
+     * @param nullStateWeight               prior weight of the null outcome (no quantity, no category), on the same scale as
+     *                                      quantityPriorWeights; 0 to disallow it
+     * @param supportedExpectedQuantities   the supported n, each strictly between the smallest and largest value among the
+     *                                      quantities and, if the null outcome is allowed, its implicit 0
+     * @param params                        table tuning parameters
      */
-    public JointSampler(double[] values, double[] categoryPriorWeights, double[] quantities,
-                         double[] quantityPriorWeights, double nullStateWeight, double[] expectedQuantities,
+    public JointSampler(double[] categoryValues, double[] categoryPriorWeights, double[] quantities,
+                         double[] quantityPriorWeights, double nullStateWeight, double[] supportedExpectedQuantities,
                          TableParams params) {
-        if (values.length == 0) throw new IllegalArgumentException("no values");
-        if (expectedQuantities.length == 0) throw new IllegalArgumentException("no expected quantities");
+        if (categoryValues.length == 0) throw new IllegalArgumentException("no categoryValues");
+        if (supportedExpectedQuantities.length == 0) throw new IllegalArgumentException("no expected quantities");
         if (!(nullStateWeight >= 0) || Double.isInfinite(nullStateWeight))
             throw new IllegalArgumentException("null-state weight must be non-negative and finite");
         boolean hasNullState = nullStateWeight > 0;
         QuantitySet quantitySet = new QuantitySet(quantities, hasNullState);
-        for (double expectedQuantity : expectedQuantities) quantitySet.requireReachable(expectedQuantity);
+        for (double expectedQuantity : supportedExpectedQuantities) quantitySet.requireReachable(expectedQuantity);
         if (quantityPriorWeights.length != quantities.length)
             throw new IllegalArgumentException("one quantity weight per quantity required");
         nullStateIndex = quantitySet.nullStateIndex;
 
-        groups = new UniqueValueGroups(values, categoryPriorWeights);
+        groups = new UniqueValueGroups(categoryValues, categoryPriorWeights);
         valueScale = groups.entryMean;
         inverseValueScale = 1.0 / valueScale;
         double[] scaledValues = new double[groups.uniqueCount];
@@ -84,9 +85,9 @@ public final class JointSampler {
             logQuantityPrior[state] = Math.log(weight);
         }
         if (hasNullState) logQuantityPrior[nullStateIndex] = Math.log(nullStateWeight);
-        quantityTables = new QuantityTable[expectedQuantities.length];
+        quantityTables = new QuantityTable[supportedExpectedQuantities.length];
         for (int i = 0; i < quantityTables.length; i++)
-            quantityTables[i] = QuantityTableBuilder.build(expectedQuantities[i], quantitySet, categoryFamily,
+            quantityTables[i] = QuantityTableBuilder.build(supportedExpectedQuantities[i], quantitySet, categoryFamily,
                     logQuantityPrior, params);
     }
 

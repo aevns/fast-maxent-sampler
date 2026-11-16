@@ -14,7 +14,7 @@ package io.github.aevns.fastmaxent;
  */
 public record TableParams(double saturationTolerance, int targetRowsPerExpectedQuantity, int categoryBlockSize,
                           long categoryTableBudgetBytes, int betaCandidatesPerSign) {
-    public static final TableParams DEFAULT = new TableParams(1e-5, 256, 8, 20_000_000L, 3000);
+    public static final TableParams DEFAULT = new TableParams(1e-5, 256, 8, 20_000_000L, 500);
 
     public TableParams {
         if (!(saturationTolerance > 0 && saturationTolerance < 1))

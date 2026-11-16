@@ -11,9 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks that the tables realize the max-entropy form p(q, k) ~ m(q) W_k exp(-lambda q - beta q x_k) at a given beta:
- * the quantity distribution has the requested mean and the right shape, and each category distribution matches the
- * exact one.
+ * Checks that the tables realize the max-entropy form, for quantity index i with value q_i, p(i, k) ~ m_i W_k
+ * exp(-lambda q_i - beta q_i x_k) at a given beta: the quantity distribution has the requested mean and the right
+ * shape, and each category distribution matches the exact one.
  */
 class MaxEntFormTest {
     /** 300 scaled values over four decades, with uneven prior weights summing to 1. */
@@ -46,7 +46,7 @@ class MaxEntFormTest {
         solver.solveLambdaForExpectedQuantity(test.expectedQuantity);
         double[] p = solver.stateProbabilities;
 
-        // Quantities: the requested mean, and ln p(q) - ln m(q) - ln Z(beta q) affine in q (the -lambda q term).
+        // Quantities: the requested mean, and ln p(i) - ln m_i - ln Z(beta q_i) affine in q_i (the -lambda q_i term).
         double mean = 0;
         double[] residual = new double[p.length];
         for (int state = 0; state < p.length; state++) {
