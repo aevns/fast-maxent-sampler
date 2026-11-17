@@ -138,16 +138,16 @@ Utilities for generating prior weights under different assumptions.
 Rough results tested on an Intel i7-12700K with 4800 MT/s DDR5 memory, measured against a set of 1470 category values and `TableParams.DEFAULT`:
 
 ### Value Sampler
-- ~124 ns per `sample()` call
+- ~106 ns per `sample()` call
 - ~1.6 µs per `sample()` call with a flushed cache
-- ~15 ms for table construction
+- ~8 ms for table construction
 - ~190 KB table size
 
 ### Joint Sampler
 Tested with 64 quantities and 4 `supportedExpectedQuantities` presets
-- ~87 ns per `sample()` call
-- ~1.8 µs per `sample()` call with a flushed cache
-- ~70 ms for table construction
+- ~99 ns per `sample()` call
+- ~1.7 µs per `sample()` call with a flushed cache
+- ~45 ms for table construction
 - ~1.2 MB table size
 
 Profiling tests are included in test classes under the `profile` tag. They're included in the default `test` task (`./gradlew test`), and can be run individually via
