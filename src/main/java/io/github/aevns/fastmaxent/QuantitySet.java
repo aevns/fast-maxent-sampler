@@ -22,13 +22,8 @@ final class QuantitySet {
         int providedStateCount = quantities.length;
         if (providedStateCount + (includeNullState ? 1 : 0) < 2)
             throw new IllegalArgumentException("need at least 2 states");
-        double[] sortedProvided = quantities.clone();
-        Arrays.sort(sortedProvided);
-        for (int i = 0; i < providedStateCount; i++) {
-            if (!Double.isFinite(sortedProvided[i])) throw new IllegalArgumentException("quantities must be finite");
-            if (i > 0 && sortedProvided[i] == sortedProvided[i - 1])
-                throw new IllegalArgumentException("quantities must be distinct");
-        }
+        for (double quantity : quantities)
+            if (!Double.isFinite(quantity)) throw new IllegalArgumentException("quantities must be finite");
         nullStateIndex = includeNullState ? providedStateCount : -1;
         // Arrays.copyOf pads with 0.0, exactly the null outcome's quantity.
         values = includeNullState ? Arrays.copyOf(quantities, providedStateCount + 1) : quantities.clone();

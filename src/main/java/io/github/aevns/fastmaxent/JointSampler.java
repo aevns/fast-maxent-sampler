@@ -44,15 +44,17 @@ public final class JointSampler {
     /**
      * Builds the sampling tables.
      *
-     * @param categoryValues                the value of each category; finite, sorted ascending, at least two distinct
-     * @param categoryPriorWeights          prior weight of each category; positive, any scale
-     * @param quantities                    allowed quantities; distinct, any order, may be negative or non-integer, may
-     *                                      include 0 (which is then an ordinary quantity, not the null outcome)
-     * @param quantityPriorWeights          prior weight of each quantity; positive, any scale
-     * @param nullStateWeight               prior weight of the null outcome (no quantity, no category), on the same scale as
-     *                                      quantityPriorWeights; 0 to disallow it
-     * @param supportedExpectedQuantities   the supported n, each strictly between the smallest and largest value among the
-     *                                      quantities and, if the null outcome is allowed, its implicit 0
+     * @param categoryValues                the value of each category; finite, sorted ascending, at least two
+     *                                      distinct values present
+     * @param categoryPriorWeights          prior weight of each category; strictly positive
+     * @param quantities                    the allowed quantities (if 0 is included, it is an ordinary quantity,
+     *                                      not the null outcome); finite
+     * @param quantityPriorWeights          prior weight of each quantity; strictly positive
+     * @param nullStateWeight               prior weight of the null outcome (no quantity, no category), on the same
+     *                                      scale as quantityPriorWeights; 0 to disallow it
+     * @param supportedExpectedQuantities   the supported secondary-constraint presets for expected quantity; each
+     *                                      strictly between the smallest and largest allowed quantity (treating the
+     *                                      null outcome, if allowed, as a quantity of 0)
      * @param params                        table tuning parameters
      */
     public JointSampler(double[] categoryValues, double[] categoryPriorWeights, double[] quantities,
@@ -92,9 +94,9 @@ public final class JointSampler {
     }
 
     /**
-     * Draws a sample at target s (raw units; clamped to the supported range for the given n).
+     * Draws a sample at target s (clamped to the supported range for the given n).
      *
-     * @param expectedQuantityIndex index into the expectedQuantities array given at construction
+     * @param expectedQuantityIndex index into the supportedExpectedQuantities array given at construction
      */
     public Sample sample(int expectedQuantityIndex, double s, RandomGenerator rng) {
         long stateAndCategoryRow =
@@ -105,12 +107,12 @@ public final class JointSampler {
         return new Sample(groups.drawEntryIndex(uniqueIndex, rng), state);
     }
 
-    /** Lower end of the clamp interval for s (raw units) for the given expected-quantity index. */
+    /** Lower end of the clamp interval for s, for the given expected-quantity index. */
     public double minTargetS(int expectedQuantityIndex) {
         return quantityTables[expectedQuantityIndex].minScaledTarget() * valueScale;
     }
 
-    /** Upper end of the clamp interval for s (raw units) for the given expected-quantity index. */
+    /** Upper end of the clamp interval for s, for the given expected-quantity index. */
     public double maxTargetS(int expectedQuantityIndex) {
         return quantityTables[expectedQuantityIndex].maxScaledTarget() * valueScale;
     }

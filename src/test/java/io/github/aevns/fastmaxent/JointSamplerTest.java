@@ -124,6 +124,11 @@ public class JointSamplerTest {
                     c.expectedQuantities = new double[] {1.5, 4, 16};
                     c.nullStateWeight = 0.0;
                 }),
+                new Config("repeated quantities",
+                        c -> {
+                    c.quantities = new double[] {0, 1, 1, 2, 3, 3, 3, 4};
+                    c.expectedQuantities = new double[] {1, 2.5};
+                }),
                 new Config("unsorted quantities",
                         c -> {
                     c.quantities = new double[] {4, 0, 2, 1, 3};

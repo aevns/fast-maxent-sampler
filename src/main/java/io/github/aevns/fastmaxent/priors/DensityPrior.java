@@ -37,7 +37,7 @@ public record DensityPrior(Axis axis, double halfWidth, double similarity, boole
     /**
      * Weight of each value, in the order given, summing to 1.
      *
-     * @param values finite, in any order; duplicates allowed
+     * @param values finite
      */
     public double[] weights(double[] values) {
         int valueCount = values.length;

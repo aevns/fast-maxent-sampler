@@ -23,7 +23,8 @@ public final class ValueSampler {
      * Builds the sampling table.
      *
      * @param values               the value of each category; finite, sorted ascending, at least two distinct
-     * @param priorWeights         prior weight of each category; positive, any scale
+     *                             values present
+     * @param priorWeights         prior weight of each category; strictly positive
      * @param params               table tuning parameters
      */
     public ValueSampler(double[] values, double[] priorWeights, TableParams params) {
@@ -49,7 +50,7 @@ public final class ValueSampler {
     }
 
     /**
-     * Draws a category index at the given target value (raw units; clamped to the supported range).
+     * Draws a category index at the given target value (clamped to the supported range).
      *
      * @return an index into the values array given at construction
      */
@@ -63,10 +64,10 @@ public final class ValueSampler {
         return groups.drawEntryIndex(uniqueIndex, rng);
     }
 
-    /** Lower end of the clamp interval for target (raw units). */
+    /** Lower end of the clamp interval for target. */
     public double minTargetValue() { return sortedMeanScaledValue[0] * valueScale; }
 
-    /** Upper end of the clamp interval for target (raw units). */
+    /** Upper end of the clamp interval for target. */
     public double maxTargetValue() {
         return sortedMeanScaledValue[sortedMeanScaledValue.length - 1] * valueScale;
     }

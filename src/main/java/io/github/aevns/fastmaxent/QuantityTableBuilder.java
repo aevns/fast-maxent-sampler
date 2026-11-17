@@ -63,7 +63,7 @@ final class QuantityTableBuilder {
         }
         double[] cumulativeArcLength = FisherArcLength.cumulativeArcLength(candidateBetas, candidateSpeeds);
         double totalArcLength = cumulativeArcLength[candidateCount - 1];
-        int rowCount = params.targetRowsPerExpectedQuantity();
+        int rowCount = params.targetRowsPerConstraintPreset();
         double[] rowBetas = new double[rowCount];
         for (int row = 0; row < rowCount; row++) {
             double targetArcLength = totalArcLength * row / (rowCount - 1);
