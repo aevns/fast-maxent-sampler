@@ -37,6 +37,8 @@ final class CategoryTable {
 
     int rowCount() { return rowT.length; }
 
+    int blockSize() { return blockSize; }
+
     double rowMeanScaledValue(int row) { return rowMeanScaledValue[row]; }
 
     long approximateMemoryBytes() {
@@ -75,13 +77,14 @@ final class CategoryTable {
     /**
      * Draws a unique-value index from the given row. The high 32 bits of the random long locate the block in
      * the coarse CDF; the low 32 bits pick within the block.
+     *
+     * @param blockWeights scratch space of at least {@link #blockSize()} entries; overwritten
      */
-    int drawUniqueIndex(int row, long random) {
+    int drawUniqueIndex(int row, long random, double[] blockWeights) {
         int block = FixedPointCdf.search(blockCdf, row * blocksPerRow, blocksPerRow, FixedPoint.highBits(random));
         int blockStart = block * blockSize, blockEnd = Math.min(blockStart + blockSize, uniqueCount);
         double t = rowT[row];
         double reference = referenceValue(t, blockStart, blockEnd);
-        double[] blockWeights = new double[blockSize];
         double blockTotal = 0;
         for (int k = blockStart; k < blockEnd; k++) {
             double weight = interleavedWeightAndScaledValue[2 * k]

@@ -23,16 +23,14 @@ import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-@DisplayName("Tests for the public JointSampler class")
-public class JointSamplerTest {
+@DisplayName("Tests for the public JointModel class")
+public class JointModelTest {
     static final long SEED = 0;
     static final String EMC_DATA_PATH = "/mc_pe_emc.txt";
     static final int DRAWS = 500_000;
-    static final int COLD_DRAWS = 1000;
     static final int S_STEPS = 9;
     static final double TOLERANCE_SIGMA = 5;
     static final double TOLERANCE_EPSILON = 1e-9;
-    static volatile long sink = 0;
     static final double[] DEFAULT_QUANTITIES = IntStream.rangeClosed(1, 64).asDoubleStream().toArray();
     static final double[] DEFAULT_EXPECTED_QUANTITIES = {0.25, 1, 4, 16};
     /** A threshold of 10 suits the EMC data. */
@@ -43,7 +41,7 @@ public class JointSamplerTest {
     static final double[] EMC_VALUES = loadValues();
 
     static double[] loadValues() {
-        try (var stream = JointSamplerTest.class.getResourceAsStream(EMC_DATA_PATH)) {
+        try (var stream = JointModelTest.class.getResourceAsStream(EMC_DATA_PATH)) {
             assertNotNull(stream);
             return new BufferedReader(new InputStreamReader(stream))
                     .lines().mapToDouble(Double::parseDouble).toArray();
@@ -66,14 +64,14 @@ public class JointSamplerTest {
             changes.accept(this);
         }
 
-        JointSampler build() {
+        JointModel build() {
             double[] quantitiesWithImpliedZero = Arrays.copyOf(quantities, quantities.length + 1);
             quantitiesWithImpliedZero[quantities.length] = 0;
             double[] weightsWithImpliedZero = quantityPrior.weights(quantitiesWithImpliedZero);
             double[] quantityPriorWeights = Arrays.copyOf(weightsWithImpliedZero, quantities.length);
             double resolvedNullStateWeight =
                     nullStateWeight != null ? nullStateWeight : weightsWithImpliedZero[quantities.length];
-            return new JointSampler(values, categoryPrior.weights(values), quantities,
+            return new JointModel(values, categoryPrior.weights(values), quantities,
                     quantityPriorWeights, resolvedNullStateWeight, expectedQuantities, params);
         }
 
@@ -103,6 +101,9 @@ public class JointSamplerTest {
                         c -> c.values = twelveDecades),
                 new Config("mixed-sign category values",
                         c -> c.values = new double[] {-100, -50, -10, -1, -0.5, 0, 0.5, 1, 10, 50, 100}),
+                new Config("unsorted category values",
+                        c -> c.values = ValueModelTest.permuted(EMC_VALUES,
+                                ValueModelTest.permutation(EMC_VALUES.length, SEED))),
                 new Config("non-integer quantities",
                         c -> {
                     c.quantities = new double[] {0, 0.5, 1, 1.5, 2.5, 4, 6.5};
@@ -141,26 +142,26 @@ public class JointSamplerTest {
     @MethodSource("configs")
     @DisplayName("Testing that E[Q] and E[Q V] match their targets across a range of n and s for each test case")
     void meanTests(Config config) {
-        SplittableRandom random = new SplittableRandom(SEED);
         double[] values = config.values, quantities = config.quantities;
         double[] expectedQuantities = config.expectedQuantities;
-        JointSampler sampler = config.build();
+        JointModel model = config.build();
+        JointModel.Sampler sampler = model.newSampler(new SplittableRandom(SEED));
         List<Executable> checks = new ArrayList<>();
         for (int n = 0; n < expectedQuantities.length; n++) {
             double setN = expectedQuantities[n];
-            double minS = sampler.minTargetS(n), maxS = sampler.maxTargetS(n);
+            double minS = model.minTargetS(n), maxS = model.maxTargetS(n);
             for (int step = 0; step < S_STEPS; step++) {
                 double setS = minS + (maxS - minS) * step / (S_STEPS - 1);
                 // Welford's running mean and variance
                 double meanQ = 0, m2Q = 0, meanQV = 0, m2QV = 0;
                 int inconsistentSamples = 0;
                 for (int j = 1; j <= DRAWS; j++) {
-                    var sample = sampler.sample(n, setS, random);
-                    boolean isNull = sample.quantityIndex < 0;
-                    boolean nullMismatch = isNull != (sample.categoryIndex < 0);
+                    var sample = sampler.sample(n, setS);
+                    boolean isNull = sample.quantityIndex() < 0;
+                    boolean nullMismatch = isNull != (sample.categoryIndex() < 0);
                     if (nullMismatch) inconsistentSamples++;
-                    double quantity = isNull ? 0 : quantities[sample.quantityIndex];
-                    double qv = sample.categoryIndex >= 0 ? quantity * values[sample.categoryIndex] : 0;
+                    double quantity = isNull ? 0 : quantities[sample.quantityIndex()];
+                    double qv = sample.categoryIndex() >= 0 ? quantity * values[sample.categoryIndex()] : 0;
                     double dQ = quantity - meanQ;
                     meanQ += dQ / j;
                     m2Q += dQ * (quantity - meanQ);
@@ -183,21 +184,21 @@ public class JointSamplerTest {
         assertAll(config.name, checks);
     }
 
-    @Test
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("io.github.aevns.fastmaxent.ValueModelTest#groupCases")
     @DisplayName("Testing that entries sharing a value are drawn in proportion to their category weights")
-    void withinGroupWeights() {
-        double[] values = {1, 1, 1, 2, 2};
-        double[] categoryWeights = {1, 2, 3, 4, 4};
-        JointSampler sampler = new JointSampler(values, categoryWeights, new double[] {0, 1}, new double[] {1, 1},
+    void withinGroupWeights(ValueModelTest.GroupCase groupCase) {
+        double[] values = groupCase.values(), categoryWeights = groupCase.categoryWeights();
+        JointModel model = new JointModel(values, categoryWeights, new double[] {0, 1}, new double[] {1, 1},
                 0, new double[] {0.5}, TableParams.DEFAULT);
-        SplittableRandom random = new SplittableRandom(SEED);
-        double s = 0.5 * (sampler.minTargetS(0) + sampler.maxTargetS(0));
+        JointModel.Sampler sampler = model.newSampler(new SplittableRandom(SEED));
+        double s = 0.5 * (model.minTargetS(0) + model.maxTargetS(0));
         long[] hits = new long[values.length];
         for (int i = 0; i < DRAWS; i++) {
-            var sample = sampler.sample(0, s, random);
-            if (sample.categoryIndex >= 0) hits[sample.categoryIndex]++;
+            var sample = sampler.sample(0, s);
+            if (sample.categoryIndex() >= 0) hits[sample.categoryIndex()]++;
         }
-        int[][] groups = {{0, 1, 2}, {3, 4}};
+        int[][] groups = groupCase.groups();
         List<Executable> checks = new ArrayList<>();
         for (int[] group : groups) {
             long groupHits = 0;
@@ -212,58 +213,5 @@ public class JointSamplerTest {
             }
         }
         assertAll(checks);
-    }
-
-    @Tag("profile")
-    @Test
-    @DisplayName("Profiling precomputation and sampling time")
-    void timingProfile() {
-        SplittableRandom random = new SplittableRandom(SEED);
-
-        long start = System.nanoTime();
-        JointSampler sampler = new Config("default", c -> {}).build();
-        long loadTimer = System.nanoTime() - start;
-
-        int[] nSet = new int[DRAWS];
-        double[] sSet = new double[DRAWS];
-
-        for (int i = 0; i < DRAWS; i++) {
-            nSet[i] = random.nextInt(DEFAULT_EXPECTED_QUANTITIES.length);
-            sSet[i] = random.nextDouble(sampler.minTargetS(nSet[i]), sampler.maxTargetS(nSet[i]));
-        }
-
-        //warmup
-        long dummy = 0;
-        for (int i = 0; i < DRAWS; i++) {
-            JointSampler.Sample sample = sampler.sample(nSet[i], sSet[i], random);
-            dummy += sample.quantityIndex + sample.categoryIndex;
-        }
-
-        //cold
-        long coldTimer = 0;
-        long[] distraction = new long[8 << 20]; // 64 MB, how much will flush the cache is machine dependent!
-        for (int i = 0; i < COLD_DRAWS; i++) {
-            // 8 longs per 64 B cache line
-            for (int j = 0; j < distraction.length; j += 8) dummy += distraction[j];
-            int n = nSet[i];
-            double s = sSet[i];
-            start = System.nanoTime();
-            JointSampler.Sample sample = sampler.sample(n, s, random);
-            coldTimer += System.nanoTime() - start;
-            dummy += sample.quantityIndex + sample.categoryIndex;
-        }
-
-        //warm
-        start = System.nanoTime();
-        for (int i = 0; i < DRAWS; i++) {
-            JointSampler.Sample sample = sampler.sample(nSet[i], sSet[i], random);
-            dummy += sample.quantityIndex + sample.categoryIndex;
-        }
-        long warmTimer = System.nanoTime() - start;
-
-        sink = dummy;
-        System.out.print("sampler load time: " + loadTimer / 1_000_000 + " ms\n");
-        System.out.print("time per sample (cold): " + (double) coldTimer / COLD_DRAWS + " ns\n");
-        System.out.print("time per sample (warm): " + (double) warmTimer / DRAWS + " ns\n");
     }
 }

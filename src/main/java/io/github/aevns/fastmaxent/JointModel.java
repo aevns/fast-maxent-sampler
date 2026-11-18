@@ -1,37 +1,71 @@
 package io.github.aevns.fastmaxent;
 
+import java.util.Objects;
 import java.util.random.RandomGenerator;
 
 /**
- * Draws a category and a quantity from the maximum-entropy distribution relative to a prior, with E[Q] = n and
- * E[Q V] = s for quantity Q and category value V. n is one of a set fixed at construction; s can be any value in the
- * supported range. An optional null outcome draws neither a quantity nor a category, with its own prior weight,
- * independent of whether 0 is itself one of the allowed quantities.
+ * The maximum-entropy distributions over categories and quantities relative to a prior, with E[Q] = n and
+ * E[Q V] = s for quantity Q and category value V, precomputed for each n in a set fixed at construction and every s
+ * in the supported range. An optional null outcome draws neither a quantity nor a category, with its own prior
+ * weight, independent of whether 0 is itself one of the allowed quantities.
  * <p>
  * With category prior w, quantity prior m and null-outcome weight m_null: for category c with value v_c, and
  * quantity index i with value q_i,
  *   p(null) ~ m_null,   p(c, i) ~ w_c m_i exp(-lambda q_i - beta q_i v_c)
  * <p>
- * Immutable once initialized; sampling is thread-safe if each caller supplies its own {@link RandomGenerator}.
+ * Immutable and thread-safe once built. Draw from it through a {@link Sampler}, one per thread.
  * <p>
  * For a single, deterministic quantity (no count distribution, no null outcome), where only E[V] = target needs to
- * be met, see {@link ValueSampler} instead: it skips the quantity side entirely and builds correspondingly
- * faster.
+ * be met, see {@link ValueModel} instead: it skips the quantity side entirely and builds correspondingly faster.
  */
-public final class JointSampler {
+public final class JointModel {
     /**
-     * Result of a draw.
-     *  Indices correspond to the values and quantities arrays being sampled from.
-     * */
-    public static final class Sample {
-        /** Index into the values array, or -1 for the null outcome. */
-        public final int categoryIndex;
-        /** Index into the quantities array, or -1 for the null outcome. */
-        public final int quantityIndex;
+     * Result of a draw. Indices correspond to the values and quantities arrays being sampled from.
+     *
+     * @param categoryIndex index into the categoryValues array, or -1 for the null outcome
+     * @param quantityIndex index into the quantities array, or -1 for the null outcome
+     */
+    public record Sample(int categoryIndex, int quantityIndex) {}
 
-        Sample(int categoryIndex, int quantityIndex) {
-            this.categoryIndex = categoryIndex;
-            this.quantityIndex = quantityIndex;
+    /**
+     * Draws from its {@link JointModel} using its own random number generator and scratch space. Cheap to create,
+     * but not thread-safe: use one per thread, as with the generator itself.
+     */
+    public static final class Sampler {
+        private final RandomGenerator rng;
+        private final double[] blockWeights;
+        // Copied from the model so a cold draw reaches the tables without first loading the model.
+        private final QuantityTable[] quantityTables;
+        private final CategoryTable categoryTable;
+        private final UniqueValueGroups groups;
+        private final double inverseValueScale;
+        private final int nullStateIndex;
+
+        private Sampler(JointModel model, RandomGenerator rng) {
+            this.rng = rng;
+            quantityTables = model.quantityTables;
+            categoryTable = model.categoryTable;
+            groups = model.groups;
+            inverseValueScale = model.inverseValueScale;
+            nullStateIndex = model.nullStateIndex;
+            blockWeights = new double[categoryTable.blockSize()];
+        }
+
+        /**
+         * Draws a sample at target s (clamped to the supported range for the given n).
+         *
+         * @param expectedQuantityIndex index into the supportedExpectedQuantities array given at construction
+         * @param s                     the target E[Q V]; clamped to [{@link JointModel#minTargetS(int)},
+         *                              {@link JointModel#maxTargetS(int)}] for the given index
+         * @return the drawn category and quantity indices, both -1 for the null outcome
+         */
+        public Sample sample(int expectedQuantityIndex, double s) {
+            long stateAndCategoryRow =
+                    quantityTables[expectedQuantityIndex].drawStateAndCategoryRow(s * inverseValueScale, rng);
+            int state = (int) (stateAndCategoryRow >>> 32);
+            if (state == nullStateIndex) return new Sample(-1, -1);
+            int uniqueIndex = categoryTable.drawUniqueIndex((int) stateAndCategoryRow, rng.nextLong(), blockWeights);
+            return new Sample(groups.drawEntryIndex(uniqueIndex, rng), state);
         }
     }
 
@@ -44,8 +78,8 @@ public final class JointSampler {
     /**
      * Builds the sampling tables.
      *
-     * @param categoryValues                the value of each category; finite, sorted ascending, at least two
-     *                                      distinct values present
+     * @param categoryValues                the value of each category; finite, in any order (already-sorted input
+     *                                      skips the internal sort), at least two distinct values present
      * @param categoryPriorWeights          prior weight of each category; strictly positive
      * @param quantities                    the allowed quantities (if 0 is included, it is an ordinary quantity,
      *                                      not the null outcome); finite
@@ -57,7 +91,7 @@ public final class JointSampler {
      *                                      null outcome, if allowed, as a quantity of 0)
      * @param params                        table tuning parameters
      */
-    public JointSampler(double[] categoryValues, double[] categoryPriorWeights, double[] quantities,
+    public JointModel(double[] categoryValues, double[] categoryPriorWeights, double[] quantities,
                          double[] quantityPriorWeights, double nullStateWeight, double[] supportedExpectedQuantities,
                          TableParams params) {
         if (categoryValues.length == 0) throw new IllegalArgumentException("no categoryValues");
@@ -94,21 +128,13 @@ public final class JointSampler {
     }
 
     /**
-     * Draws a sample at target s (clamped to the supported range for the given n).
+     * Creates a sampler that draws from this model. Samplers are not thread-safe; create one per thread.
      *
-     * @param expectedQuantityIndex index into the supportedExpectedQuantities array given at construction
-     * @param s                     the target E[Q V]; clamped to [{@link #minTargetS(int)}, {@link #maxTargetS(int)}]
-     *                              for the given index
-     * @param rng                   a random number generator implementing rng.nextLong()
-     * @return the drawn category and quantity indices, both -1 for the null outcome
+     * @param rng the random number generator the sampler draws with
+     * @return a new sampler
      */
-    public Sample sample(int expectedQuantityIndex, double s, RandomGenerator rng) {
-        long stateAndCategoryRow =
-                quantityTables[expectedQuantityIndex].drawStateAndCategoryRow(s * inverseValueScale, rng);
-        int state = (int) (stateAndCategoryRow >>> 32);
-        if (state == nullStateIndex) return new Sample(-1, -1);
-        int uniqueIndex = categoryTable.drawUniqueIndex((int) stateAndCategoryRow, rng.nextLong());
-        return new Sample(groups.drawEntryIndex(uniqueIndex, rng), state);
+    public Sampler newSampler(RandomGenerator rng) {
+        return new Sampler(this, Objects.requireNonNull(rng, "rng"));
     }
 
     /**
@@ -132,7 +158,7 @@ public final class JointSampler {
     }
 
     /**
-     * Approximate memory held by this sampler.
+     * Approximate memory held by this model (each {@link Sampler} adds only its small scratch buffer).
      *
      * @return approximate size in bytes of the precomputed tables for every preset, plus grouped category data
      */

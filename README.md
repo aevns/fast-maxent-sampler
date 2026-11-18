@@ -1,11 +1,13 @@
 
-**Disclaimer: The development of this library was assisted by agentic AI under precise direction and manual review.**
+[![Maven Central](https://shields.io/maven-central/v/io.github.aevns/fast-maxent-sampler)](https://central.sonatype.com/artifact/io.github.aevns/fast-maxent-sampler)
+
+*The development of this library was assisted by agentic AI under precise direction and manual review.*
 
 # fast-maxent-sampler
 
-A library for high-performance maximum-entropy sampling under certain moment constraints. A primary constraint can be set freely on each draw, and any secondary constraints are selected on each draw from among a set of presets chosen at construction.
+A library for high-performance maximum-entropy sampling under certain moment constraints. A primary constraint can be set freely on each draw, and any secondary constraints are selected on each draw from among a set of presets chosen at construction. Constraints are met exactly (up to 32-bit fixed point precision), and the maximum entropy condition is approximated with fisher-spaced tables.
 
-The library currently supports two models: a **Value Sampler** over categories and a **Joint Sampler** over categories and quantities.
+The library currently supports two models: a **Value Model** over categories and a **Joint Model** over categories and quantities.
 
 ## Model Overview
 
@@ -17,7 +19,7 @@ A model draws one output index per dimension it samples (such as over a collecti
 
 ## Supported Models
 
-### Value Sampler
+### Value Model
 
 This model samples from categories with associated values, such as items of set prices or microstates of given energies. Samples are distributed according to
 
@@ -25,7 +27,7 @@ $$p_C(c \mid \mathbb{E}[V]) \propto w_c \cdot e^{-\beta(\mathbb{E}[V]) \cdot v_c
 
 for category $c$ with value $v_c$ and prior $w_c$. Sampling gives a random index $C$ with value $V = v_C$. Category values and weights are provided at construction. The desired mean value $\mathbb{E}[V]$ is the primary constraint, provided at sampling time.
 
-### Joint Sampler
+### Joint Model
 
 This model samples from categories with associated values and over a set of possible quantities, such as bundles of identical items with total undiscounted prices. Samples are distributed according to
 
@@ -39,19 +41,19 @@ for quantity $q_i$ with associated prior $m_i$, and for null state weight $m_\te
 
 Requires Java 21+.
 
-The project is available on Maven Central with coordinates `io.github.aevns:fast-maxent-sampler:0.1.0`. It can be included as a dependency with:
+The project is available on Maven Central with coordinates `io.github.aevns:fast-maxent-sampler:0.2.0`. It can be included as a dependency with:
 
 ```kotlin
 // Gradle (Kotlin DSL)
 dependencies {
-    implementation("io.github.aevns:fast-maxent-sampler:0.1.0")
+    implementation("io.github.aevns:fast-maxent-sampler:0.2.0")
 }
 ```
 
 ```groovy
 // Gradle (Groovy DSL)
 dependencies {
-    implementation 'io.github.aevns:fast-maxent-sampler:0.1.0'
+    implementation 'io.github.aevns:fast-maxent-sampler:0.2.0'
 }
 ```
 
@@ -60,36 +62,39 @@ dependencies {
 <dependency>
     <groupId>io.github.aevns</groupId>
     <artifactId>fast-maxent-sampler</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
 ## Usage
 
-### ValueSampler
+Each model contains its precomputed tables, is immutable, and is thread safe. Sampling is done through a `Sampler` created with `model.newSampler(rng)`, which holds a random number generator implementing `nextLong()` and a small scratch buffer. Samplers are not thread-safe: one should be created per thread, just like the generators they use.
 
-`ValueSampler(values, priorWeights, params)`
+### ValueModel
 
-- `values` — the value of each category; finite, sorted ascending, at least two distinct values present.
+`ValueModel(values, priorWeights, params)`
+
+- `values` — the value of each category; finite, in any order (already-sorted input skips the internal sort), at least two distinct values present.
 - `priorWeights` — prior weight of each category; strictly positive.
 - `params` — a `TableParams` (see below); `TableParams.DEFAULT` is a reasonable starting point.
 
-`sample(target, rng)` draws and returns a category index given a target `E[V]` (clamped to `[minTargetValue(), maxTargetValue()]`).
+`sampler.sample(target)` draws and returns a category index given a target `E[V]` (clamped to `[model.minTargetValue(), model.maxTargetValue()]`).
 
 ```java
 double[] values = {1.0, 2.5, 5.0, 10.0};
 double[] priorWeights = {1, 1, 1, 1};
-ValueSampler sampler = new ValueSampler(values, priorWeights, TableParams.DEFAULT);
+ValueModel model = new ValueModel(values, priorWeights, TableParams.DEFAULT);
+ValueModel.Sampler sampler = model.newSampler(new SplittableRandom());
 
-int index = sampler.sample(4.0, new SplittableRandom());
+int index = sampler.sample(4.0);
 double drawnValue = values[index];
 ```
 
-### JointSampler
+### JointModel
 
-`JointSampler(categoryValues, categoryPriorWeights, quantities, quantityPriorWeights, nullStateWeight, supportedExpectedQuantities, params)`
+`JointModel(categoryValues, categoryPriorWeights, quantities, quantityPriorWeights, nullStateWeight, supportedExpectedQuantities, params)`
 
-- `categoryValues` — the value of each category; finite, sorted ascending, at least two distinct values present.
+- `categoryValues` — the value of each category; finite, in any order (already-sorted input skips the internal sort), at least two distinct values present.
 - `categoryPriorWeights` — prior weight of each category; strictly positive.
 - `quantities` — the allowed quantities (if 0 is included, it is an ordinary quantity, not the null outcome); finite.
 - `quantityPriorWeights` — prior weight of each quantity; strictly positive.
@@ -97,7 +102,7 @@ double drawnValue = values[index];
 - `supportedExpectedQuantities` — the supported secondary-constraint presets for expected quantity; each strictly between the smallest and largest allowed quantity (treating the null outcome, if allowed, as a quantity of 0).
 - `params` — a `TableParams` (see below); `TableParams.DEFAULT` is a reasonable starting point.
 
-`sample(expectedQuantityIndex, s, rng)` obtains the secondary-constraint preset by index into `supportedExpectedQuantities`, then draws at the given primary-constraint target `s = E[Q · V]` (clamped to `[minTargetS(expectedQuantityIndex), maxTargetS(expectedQuantityIndex)]`). It draws and returns a `JointSampler.Sample` with a `categoryIndex` and a `quantityIndex`. Both indices are -1 for a null state outcome.
+`sampler.sample(expectedQuantityIndex, s)` obtains the secondary-constraint preset by index into `supportedExpectedQuantities`, drawing with it and the given primary-constraint target `s = E[Q · V]` (clamped to `[model.minTargetS(expectedQuantityIndex), model.maxTargetS(expectedQuantityIndex)]`). It draws and returns a `JointModel.Sample` with a `categoryIndex` and a `quantityIndex`. Both indices are -1 for a null state outcome.
 
 ```java
 double[] categoryValues = {1.0, 2.5, 5.0, 10.0};
@@ -105,14 +110,15 @@ double[] categoryPriorWeights = {1, 1, 1, 1};
 double[] quantities = {0, 1, 2, 3, 4};
 double[] quantityPriorWeights = {1, 1, 1, 1, 1};
 double[] supportedExpectedQuantities = {1, 2};
-JointSampler sampler = new JointSampler(categoryValues, categoryPriorWeights, quantities,
+JointModel model = new JointModel(categoryValues, categoryPriorWeights, quantities,
         quantityPriorWeights, 0.0, supportedExpectedQuantities, TableParams.DEFAULT);
+JointModel.Sampler sampler = model.newSampler(new SplittableRandom());
 
-JointSampler.Sample sample = sampler.sample(0, 2.5, new SplittableRandom());
-boolean isNull = sample.quantityIndex < 0;
+JointModel.Sample sample = sampler.sample(0, 2.5);
+boolean isNull = sample.quantityIndex() < 0;
 if (!isNull) {
-    double drawnValue = categoryValues[sample.categoryIndex];
-    double drawnQuantity = quantities[sample.quantityIndex];
+    double drawnValue = categoryValues[sample.categoryIndex()];
+    double drawnQuantity = quantities[sample.quantityIndex()];
 }
 ```
 
@@ -140,27 +146,31 @@ Utilities for generating prior weights under different assumptions.
 
 ## Performance
 
-`approximateMemoryBytes()`, on all samplers, reports the approximate size of its precomputed tables plus the grouped category/quantity data.
+`approximateMemoryBytes()`, on both models, reports the approximate size of its precomputed tables plus the grouped category/quantity data.
 
 Rough results tested on an Intel i7-12700K with 4800 MT/s DDR5 memory, measured against a set of 1470 category values and `TableParams.DEFAULT`:
 
-### Value Sampler
-- ~106 ns per `sample()` call
-- ~1.6 µs per `sample()` call with a flushed cache
-- ~8 ms for table construction
+### Value Model
+- ~101 ns per `sample()` call
+- no allocation per `sample()` call
+- ~7.3 ms for table construction
 - ~190 KB table size
 
-### Joint Sampler
+### Joint Model
 Tested with 64 quantities and 4 `supportedExpectedQuantities` presets
-- ~99 ns per `sample()` call
-- ~1.7 µs per `sample()` call with a flushed cache
-- ~45 ms for table construction
+- ~81 ns per `sample()` call
+- 24 B allocated per `sample()` call for the returned `Sample` record
+- ~30 ms for table construction
 - ~1.2 MB table size
 
-Profiling tests are included in test classes under the `profile` tag. They're included in the default `test` task (`./gradlew test`), and can be run individually via
+These figures represent performance over repeated samples, and so table data will remain in cache between samples. Sampling with tables flushed from the cache may take on the order of a microsecond on typical desktop hardware.
+
+Benchmarks use [JMH](https://github.com/openjdk/jmh) and can be found in `src/jmh`. Table build time and sample time are testable for each model. [JMH options](https://github.com/openjdk/jmh) can be passed with `--args`:
 
 ```bash
-./gradlew test --tests "io.github.aevns.fastmaxent.ValueSamplerTest.timingProfile" --tests "io.github.aevns.fastmaxent.JointSamplerTest.timingProfile"
+./gradlew jmh                                    # run all benchmarks
+./gradlew jmh --args="ValueModelBenchmark"       # run one class (regex match on benchmark names)
+./gradlew jmh --args="sample -prof gc"           # include bytes allocated per sample
 ```
 
 ## Building and testing
@@ -168,9 +178,8 @@ Profiling tests are included in test classes under the `profile` tag. They're in
 ```bash
 ./gradlew build   # compile and run all tests
 ./gradlew test    # run all tests
+./gradlew jmh     # run benchmarks (not part of build or test)
 ```
-
-The default `test` task includes profiling tests (tagged `profile`).
 
 ## License
 

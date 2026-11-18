@@ -4,8 +4,9 @@ import java.util.random.RandomGenerator;
 import java.util.Arrays;
 
 /**
- * Sorted values collapsed into unique values with their multiplicities and prior weights. Each group is a contiguous
- * entry range, so an entry is drawn from its group directly, in proportion to the entries' prior weights.
+ * Values collapsed into unique values with their multiplicities and prior weights. Each group is a contiguous range of
+ * entries in sorted order, so an entry is drawn from its group directly, in proportion to the entries' prior weights.
+ * Unsorted input is sorted internally; drawn entries are always mapped back to positions in the caller's array.
  */
 final class UniqueValueGroups {
     final int uniqueCount;
@@ -22,17 +23,36 @@ final class UniqueValueGroups {
     /** Per-group {@link FixedPointCdf} over the entries of groups with unequal weights; null if there are none. */
     private final int[] entryCdf;
     private final boolean[] weightedGroup;
+    /** Caller's index of each entry in sorted order; null when the caller's values were already sorted. */
+    private final int[] inputIndexOfSortedEntry;
 
-    UniqueValueGroups(double[] sortedValues, double[] entryWeights) {
-        int entryCount = sortedValues.length;
-        if (entryWeights.length != entryCount)
+    UniqueValueGroups(double[] values, double[] weights) {
+        int entryCount = values.length;
+        if (weights.length != entryCount)
             throw new IllegalArgumentException("one category weight per value required");
+        boolean alreadySorted = true;
         for (int i = 0; i < entryCount; i++) {
-            if (!Double.isFinite(sortedValues[i])) throw new IllegalArgumentException("values must be finite");
-            if (i > 0 && sortedValues[i] < sortedValues[i - 1])
-                throw new IllegalArgumentException("values must be sorted");
-            if (!(entryWeights[i] > 0) || Double.isInfinite(entryWeights[i]))
+            if (!Double.isFinite(values[i])) throw new IllegalArgumentException("values must be finite");
+            if (i > 0 && values[i] < values[i - 1]) alreadySorted = false;
+            if (!(weights[i] > 0) || Double.isInfinite(weights[i]))
                 throw new IllegalArgumentException("category weights must be positive and finite");
+        }
+        double[] sortedValues = values, entryWeights = weights;
+        if (alreadySorted) {
+            inputIndexOfSortedEntry = null;
+        } else {
+            // Stable, so entries sharing a value keep the caller's relative order.
+            Integer[] order = new Integer[entryCount];
+            for (int i = 0; i < entryCount; i++) order[i] = i;
+            Arrays.sort(order, (a, b) -> Double.compare(values[a], values[b]));
+            inputIndexOfSortedEntry = new int[entryCount];
+            sortedValues = new double[entryCount];
+            entryWeights = new double[entryCount];
+            for (int i = 0; i < entryCount; i++) {
+                inputIndexOfSortedEntry[i] = order[i];
+                sortedValues[i] = values[order[i]];
+                entryWeights[i] = weights[order[i]];
+            }
         }
         int[] groupStartScratch = new int[entryCount + 1];
         int groups = 0;
@@ -84,22 +104,26 @@ final class UniqueValueGroups {
         entryAbsoluteMean = absValueSum / entryCount;
     }
 
-    /** Picks an entry index within the group (consumes a random long only if the group has duplicates). */
+    /**
+     * Picks an entry within the group (consumes a random long only if the group has duplicates) and returns its index
+     * in the caller's values array.
+     */
     int drawEntryIndex(int uniqueIndex, RandomGenerator rng) {
         int size = groupSize[uniqueIndex];
         int entryIndex = groupStartIndex[uniqueIndex];
         if (size > 1) {
             long key = FixedPoint.highBits(rng.nextLong());
-            if (weightedGroup != null && weightedGroup[uniqueIndex])
-                return entryIndex + FixedPointCdf.search(entryCdf, entryIndex, size, key);
-            entryIndex += (int) ((key * size) >>> 32);
+            entryIndex += weightedGroup != null && weightedGroup[uniqueIndex]
+                    ? FixedPointCdf.search(entryCdf, entryIndex, size, key)
+                    : (int) ((key * size) >>> 32);
         }
-        return entryIndex;
+        return inputIndexOfSortedEntry == null ? entryIndex : inputIndexOfSortedEntry[entryIndex];
     }
 
     long approximateMemoryBytes() {
         long bytes = 4L * (groupStartIndex.length + groupSize.length);
         if (entryCdf != null) bytes += 4L * entryCdf.length + weightedGroup.length;
+        if (inputIndexOfSortedEntry != null) bytes += 4L * inputIndexOfSortedEntry.length;
         return bytes;
     }
 }
