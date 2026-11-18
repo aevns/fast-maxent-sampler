@@ -3,8 +3,8 @@ package io.github.aevns.fastmaxent;
 import java.util.random.RandomGenerator;
 
 /**
- * Draws a category and a quantity from the maximum-entropy distribution relative to a prior, with E[N] = n and
- * E[N V] = s for quantity N and category value V. n is one of a set fixed at construction; s can be any value in the
+ * Draws a category and a quantity from the maximum-entropy distribution relative to a prior, with E[Q] = n and
+ * E[Q V] = s for quantity Q and category value V. n is one of a set fixed at construction; s can be any value in the
  * supported range. An optional null outcome draws neither a quantity nor a category, with its own prior weight,
  * independent of whether 0 is itself one of the allowed quantities.
  * <p>
@@ -97,6 +97,10 @@ public final class JointSampler {
      * Draws a sample at target s (clamped to the supported range for the given n).
      *
      * @param expectedQuantityIndex index into the supportedExpectedQuantities array given at construction
+     * @param s                     the target E[Q V]; clamped to [{@link #minTargetS(int)}, {@link #maxTargetS(int)}]
+     *                              for the given index
+     * @param rng                   a random number generator implementing rng.nextLong()
+     * @return the drawn category and quantity indices, both -1 for the null outcome
      */
     public Sample sample(int expectedQuantityIndex, double s, RandomGenerator rng) {
         long stateAndCategoryRow =
@@ -107,16 +111,31 @@ public final class JointSampler {
         return new Sample(groups.drawEntryIndex(uniqueIndex, rng), state);
     }
 
-    /** Lower end of the clamp interval for s, for the given expected-quantity index. */
+    /**
+     * Lower end of the clamp interval for s, for the given expected-quantity index.
+     *
+     * @param expectedQuantityIndex index into the supportedExpectedQuantities array given at construction
+     * @return the smallest supported s at that index
+     */
     public double minTargetS(int expectedQuantityIndex) {
         return quantityTables[expectedQuantityIndex].minScaledTarget() * valueScale;
     }
 
-    /** Upper end of the clamp interval for s, for the given expected-quantity index. */
+    /**
+     * Upper end of the clamp interval for s, for the given expected-quantity index.
+     *
+     * @param expectedQuantityIndex index into the supportedExpectedQuantities array given at construction
+     * @return the largest supported s at that index
+     */
     public double maxTargetS(int expectedQuantityIndex) {
         return quantityTables[expectedQuantityIndex].maxScaledTarget() * valueScale;
     }
 
+    /**
+     * Approximate memory held by this sampler.
+     *
+     * @return approximate size in bytes of the precomputed tables for every preset, plus grouped category data
+     */
     public long approximateMemoryBytes() {
         long bytes = categoryTable.approximateMemoryBytes() + groups.approximateMemoryBytes();
         for (QuantityTable table : quantityTables) bytes += table.approximateMemoryBytes();

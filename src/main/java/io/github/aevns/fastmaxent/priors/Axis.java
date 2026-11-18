@@ -4,13 +4,29 @@ import java.util.function.DoubleUnaryOperator;
 
 /** A transformation of values onto an axis: {@link Linear}, {@link Symlog}, or a custom one via {@link #of}. */
 public interface Axis {
-    /** Position of the value along the axis; strictly increasing. */
+    /**
+     * Position of the value along the axis; strictly increasing.
+     *
+     * @param value a value
+     * @return its position along the axis
+     */
     double position(double value);
 
-    /** Transforms a difference between values into a difference between positions. */
+    /**
+     * Transforms a difference between values into a difference between positions.
+     *
+     * @param difference a difference between values, in the axis's own sense (absolute, relative, ...)
+     * @return the corresponding difference between positions
+     */
     double scale(double difference);
 
-    /** An axis from its position and scale functions. */
+    /**
+     * An axis from its position and scale functions.
+     *
+     * @param position maps a value to its position; strictly increasing
+     * @param scale    maps a difference between values to a difference between positions
+     * @return the axis
+     */
     static Axis of(DoubleUnaryOperator position, DoubleUnaryOperator scale) {
         return new Axis() {
             @Override public double position(double value) { return position.applyAsDouble(value); }
@@ -32,6 +48,7 @@ public interface Axis {
      * @param threshold positive and finite
      */
     record Symlog(double threshold) implements Axis {
+        /** Validates the threshold; throws {@link IllegalArgumentException} if it is not positive and finite. */
         public Symlog {
             if (!(threshold > 0) || Double.isInfinite(threshold))
                 throw new IllegalArgumentException("threshold must be positive and finite");

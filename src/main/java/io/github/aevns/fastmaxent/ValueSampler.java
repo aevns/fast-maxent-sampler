@@ -52,6 +52,8 @@ public final class ValueSampler {
     /**
      * Draws a category index at the given target value (clamped to the supported range).
      *
+     * @param target the target mean value E[V]; clamped to [{@link #minTargetValue()}, {@link #maxTargetValue()}]
+     * @param rng    a random number generator implementing rng.nextLong()
      * @return an index into the values array given at construction
      */
     public int sample(double target, RandomGenerator rng) {
@@ -64,14 +66,27 @@ public final class ValueSampler {
         return groups.drawEntryIndex(uniqueIndex, rng);
     }
 
-    /** Lower end of the clamp interval for target. */
+    /**
+     * Lower end of the clamp interval for target.
+     *
+     * @return the smallest supported target value
+     */
     public double minTargetValue() { return sortedMeanScaledValue[0] * valueScale; }
 
-    /** Upper end of the clamp interval for target. */
+    /**
+     * Upper end of the clamp interval for target.
+     *
+     * @return the largest supported target value
+     */
     public double maxTargetValue() {
         return sortedMeanScaledValue[sortedMeanScaledValue.length - 1] * valueScale;
     }
 
+    /**
+     * Approximate memory held by this sampler.
+     *
+     * @return approximate size in bytes of the precomputed table and grouped category data
+     */
     public long approximateMemoryBytes() {
         return categoryTable.approximateMemoryBytes() + groups.approximateMemoryBytes()
                 + 8L * sortedMeanScaledValue.length + 4L * rowOfSortedIndex.length;

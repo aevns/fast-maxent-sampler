@@ -23,6 +23,7 @@ public record TableParams(double saturationTolerance, int targetRowsPerConstrain
                           long categoryTableBudgetBytes, int betaCandidatesPerSign) {
     public static final TableParams DEFAULT = new TableParams(1e-5, 256, 8, 20_000_000L, 500);
 
+    /** Validates the parameters; throws {@link IllegalArgumentException} if any is out of range. */
     public TableParams {
         if (!(saturationTolerance > 0 && saturationTolerance < 1))
             throw new IllegalArgumentException("saturation tolerance must be in (0, 1)");

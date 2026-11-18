@@ -26,6 +26,7 @@ public record DensityPrior(Axis axis, double halfWidth, double similarity, boole
     /** Guards against outermost values spaced too finely to continue. */
     private static final int MAX_CONTINUED_VALUES = 1 << 20;
 
+    /** Validates the parameters; throws {@link IllegalArgumentException} if any is out of range. */
     public DensityPrior {
         if (axis == null) throw new IllegalArgumentException("no axis");
         double positionHalfWidth = axis.scale(halfWidth);
@@ -38,6 +39,7 @@ public record DensityPrior(Axis axis, double halfWidth, double similarity, boole
      * Weight of each value, in the order given, summing to 1.
      *
      * @param values finite
+     * @return one weight per value, in the order given
      */
     public double[] weights(double[] values) {
         int valueCount = values.length;

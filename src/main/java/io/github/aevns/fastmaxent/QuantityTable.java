@@ -6,7 +6,7 @@ import java.util.random.RandomGenerator;
 /**
  * For one expected quantity n: stored rows at ascending targets s. Each row holds, per quantity state, an alias entry
  * and the pair of category rows to mix. Between two rows one is picked with probability linear in s, which keeps
- * E[N] = n and E[N V] = s exact. Entries are interleaved so one cache line serves both lookups.
+ * E[Q] = n and E[Q V] = s exact. Entries are interleaved so one cache line serves both lookups.
  */
 final class QuantityTable {
     private static final int INTS_PER_STATE_ENTRY = 4;

@@ -39,12 +39,19 @@ for quantity $q_i$ with associated prior $m_i$, and for null state weight $m_\te
 
 Requires Java 21+.
 
-The project is yet to be published to Maven Central. Once published, its coordinates will be `io.github.aevns:fast-maxent-sampler:<version>`, and it can be included as a dependency with:
+The project is available on Maven Central with coordinates `io.github.aevns:fast-maxent-sampler:0.1.0`. It can be included as a dependency with:
 
 ```kotlin
 // Gradle (Kotlin DSL)
 dependencies {
     implementation("io.github.aevns:fast-maxent-sampler:0.1.0")
+}
+```
+
+```groovy
+// Gradle (Groovy DSL)
+dependencies {
+    implementation 'io.github.aevns:fast-maxent-sampler:0.1.0'
 }
 ```
 

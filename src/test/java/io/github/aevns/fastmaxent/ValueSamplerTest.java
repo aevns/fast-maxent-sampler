@@ -71,7 +71,7 @@ class ValueSamplerTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("configs")
-    @DisplayName("Testing that <V> matches its target across the supported range")
+    @DisplayName("Testing that E[V] matches its target across the supported range")
     void meanTests(Config config) {
         double[] values = config.values();
         SplittableRandom random = new SplittableRandom(SEED);
@@ -92,7 +92,7 @@ class ValueSamplerTest {
             double tolerance = TOLERANCE_SIGMA * sqrt(m2 / (DRAWS - 1) / DRAWS) + TOLERANCE_EPSILON * abs(target);
             double observed = mean;
             String cell = String.format("target = %.6g", target);
-            checks.add(() -> assertEquals(target, observed, tolerance, "<V> at " + cell));
+            checks.add(() -> assertEquals(target, observed, tolerance, "E[V] at " + cell));
         }
         assertAll(checks);
     }

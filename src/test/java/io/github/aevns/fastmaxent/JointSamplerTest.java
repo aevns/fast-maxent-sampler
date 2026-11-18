@@ -139,7 +139,7 @@ public class JointSamplerTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("configs")
-    @DisplayName("Testing that <N> and <NV> match their targets across a range of n and s for each test case")
+    @DisplayName("Testing that E[Q] and E[Q V] match their targets across a range of n and s for each test case")
     void meanTests(Config config) {
         SplittableRandom random = new SplittableRandom(SEED);
         double[] values = config.values, quantities = config.quantities;
@@ -152,7 +152,7 @@ public class JointSamplerTest {
             for (int step = 0; step < S_STEPS; step++) {
                 double setS = minS + (maxS - minS) * step / (S_STEPS - 1);
                 // Welford's running mean and variance
-                double meanN = 0, m2N = 0, meanNV = 0, m2NV = 0;
+                double meanQ = 0, m2Q = 0, meanQV = 0, m2QV = 0;
                 int inconsistentSamples = 0;
                 for (int j = 1; j <= DRAWS; j++) {
                     var sample = sampler.sample(n, setS, random);
@@ -160,22 +160,22 @@ public class JointSamplerTest {
                     boolean nullMismatch = isNull != (sample.categoryIndex < 0);
                     if (nullMismatch) inconsistentSamples++;
                     double quantity = isNull ? 0 : quantities[sample.quantityIndex];
-                    double nv = sample.categoryIndex >= 0 ? quantity * values[sample.categoryIndex] : 0;
-                    double dN = quantity - meanN;
-                    meanN += dN / j;
-                    m2N += dN * (quantity - meanN);
-                    double dNV = nv - meanNV;
-                    meanNV += dNV / j;
-                    m2NV += dNV * (nv - meanNV);
+                    double qv = sample.categoryIndex >= 0 ? quantity * values[sample.categoryIndex] : 0;
+                    double dQ = quantity - meanQ;
+                    meanQ += dQ / j;
+                    m2Q += dQ * (quantity - meanQ);
+                    double dQV = qv - meanQV;
+                    meanQV += dQV / j;
+                    m2QV += dQV * (qv - meanQV);
                 }
                 // 5 sigma tolerance isn't foolproof; it should be fine, but outliers can happen.
-                double toleranceN = TOLERANCE_SIGMA * sqrt(m2N / (DRAWS - 1) / DRAWS) + TOLERANCE_EPSILON * abs(setN);
-                double toleranceNV = TOLERANCE_SIGMA * sqrt(m2NV / (DRAWS - 1) / DRAWS) + TOLERANCE_EPSILON * abs(setS);
-                double observedN = meanN, observedNV = meanNV;
+                double toleranceQ = TOLERANCE_SIGMA * sqrt(m2Q / (DRAWS - 1) / DRAWS) + TOLERANCE_EPSILON * abs(setN);
+                double toleranceQV = TOLERANCE_SIGMA * sqrt(m2QV / (DRAWS - 1) / DRAWS) + TOLERANCE_EPSILON * abs(setS);
+                double observedQ = meanQ, observedQV = meanQV;
                 int inconsistent = inconsistentSamples;
                 String cell = String.format("n = %s, s = %.6g", setN, setS);
-                checks.add(() -> assertEquals(setN, observedN, toleranceN, "<N> at " + cell));
-                checks.add(() -> assertEquals(setS, observedNV, toleranceNV, "<NV> at " + cell));
+                checks.add(() -> assertEquals(setN, observedQ, toleranceQ, "E[Q] at " + cell));
+                checks.add(() -> assertEquals(setS, observedQV, toleranceQV, "E[Q V] at " + cell));
                 checks.add(() -> assertEquals(0, inconsistent,
                         "samples whose quantityIndex and categoryIndex disagree about the null outcome at " + cell));
             }
